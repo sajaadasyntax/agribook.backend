@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { NotFoundError, BadRequestError, DatabaseError } from '../utils/errors';
+import { NotFoundError, DatabaseError } from '../utils/errors';
 import { logInfo, logError } from '../utils/logger';
 import { CreateAlertDto } from '../types';
 import { Alert, AlertType } from '@prisma/client';

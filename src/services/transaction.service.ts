@@ -7,7 +7,7 @@ import {
   TransactionFilters,
   PaginatedResponse,
 } from '../types';
-import { Transaction, TransactionType } from '@prisma/client';
+import { Transaction } from '@prisma/client';
 
 export class TransactionService {
   async getTransactions(
