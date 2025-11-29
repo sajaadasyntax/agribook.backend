@@ -6,6 +6,7 @@ import { logInfo, logError } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/logger';
 import notificationService from './services/notification.service';
+import prisma from './config/database';
 
 // Routes
 import userRoutes from './routes/users.routes';
@@ -45,10 +46,26 @@ if (process.env.NODE_ENV === 'production') {
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check
-app.get('/api/health', (_req: Request, res: Response) => {
-  logInfo('Health check', {});
-  res.json({ status: 'ok', message: 'AgriBooks API is running', timestamp: new Date().toISOString() });
+// Health check endpoint (with database connectivity check)
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    // Quick database connectivity check
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ 
+      status: 'ok', 
+      message: 'AgriBooks API is running',
+      database: 'connected',
+      timestamp: new Date().toISOString() 
+    });
+  } catch (error) {
+    logError('Health check failed: Database connection error', error);
+    res.status(503).json({ 
+      status: 'error', 
+      message: 'AgriBooks API is running but database is not accessible',
+      database: 'disconnected',
+      timestamp: new Date().toISOString() 
+    });
+  }
 });
 
 // API Routes
@@ -69,9 +86,29 @@ app.use((req: Request, res: Response) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
-// Start server
+// Validate database connection before starting server
+const validateDatabaseConnection = async (): Promise<void> => {
+  try {
+    logInfo('Validating database connection...', {});
+    await prisma.$connect();
+    // Test query to ensure connection is working
+    await prisma.$queryRaw`SELECT 1`;
+    logInfo('Database connected successfully', {});
+  } catch (error) {
+    logError('Failed to connect to database', error, {
+      message: 'The server cannot start without a database connection. Please check your DATABASE_URL environment variable and ensure PostgreSQL is running.',
+    });
+    process.exit(1);
+  }
+};
+
+// Start server with database validation
 // Listen on all network interfaces (0.0.0.0) to allow connections from physical devices
-const server = app.listen(Number(PORT), HOST, () => {
+const startServer = async (): Promise<void> => {
+  // Validate database connection before starting
+  await validateDatabaseConnection();
+
+  const server = app.listen(Number(PORT), HOST, () => {
   logInfo('Server started', {
     port: PORT,
     host: HOST,
@@ -111,24 +148,36 @@ const server = app.listen(Number(PORT), HOST, () => {
   logInfo('Reminder scheduler started', {
     interval: `${REMINDER_CHECK_INTERVAL / 1000 / 60} minutes`,
   });
+  });
+
+  // Graceful shutdown handlers
+  process.on('SIGTERM', () => {
+    logInfo('SIGTERM received, shutting down gracefully');
+    server.close(async () => {
+      logInfo('Disconnecting from database...');
+      await prisma.$disconnect();
+      logInfo('Process terminated');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    logInfo('SIGINT received, shutting down gracefully');
+    server.close(async () => {
+      logInfo('Disconnecting from database...');
+      await prisma.$disconnect();
+      logInfo('Process terminated');
+      process.exit(0);
+    });
+  });
+};
+
+// Start the server
+startServer().catch((error) => {
+  logError('Fatal error starting server', error);
+  process.exit(1);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logInfo('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    logInfo('Process terminated');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  logInfo('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    logInfo('Process terminated');
-    process.exit(0);
-  });
-});
 
 export default app;
 
