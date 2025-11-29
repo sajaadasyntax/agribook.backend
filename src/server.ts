@@ -5,6 +5,7 @@ import path from 'path';
 import { logInfo, logError } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/logger';
+import notificationService from './services/notification.service';
 
 // Routes
 import userRoutes from './routes/users.routes';
@@ -90,6 +91,26 @@ const server = app.listen(Number(PORT), HOST, () => {
       // This is expected behavior when not using PM2 cluster mode
     }
   }
+
+  // Start reminder scheduler
+  // Check reminders every hour (3600000 ms)
+  const REMINDER_CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
+  
+  // Check immediately on startup
+  notificationService.checkAllReminders().catch((error) => {
+    logError('Error checking reminders on startup', error);
+  });
+
+  // Schedule periodic checks
+  setInterval(() => {
+    notificationService.checkAllReminders().catch((error) => {
+      logError('Error checking reminders', error);
+    });
+  }, REMINDER_CHECK_INTERVAL);
+
+  logInfo('Reminder scheduler started', {
+    interval: `${REMINDER_CHECK_INTERVAL / 1000 / 60} minutes`,
+  });
 });
 
 // Graceful shutdown

@@ -37,6 +37,7 @@ model Category {
   updatedAt   DateTime @updatedAt
   
   transactions Transaction[]
+  reminders    Reminder[]
   
   @@unique([name, type])
   @@map("categories")
@@ -93,19 +94,33 @@ enum AlertType {
 }
 
 model Reminder {
-  id          String    @id @default(uuid())
-  title       String
-  description String?
-  dueDate     DateTime
-  completed   Boolean   @default(false)
-  userId      String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String          @id @default(uuid())
+  title             String
+  description       String?
+  dueDate           DateTime
+  completed         Boolean         @default(false)
+  userId            String
+  reminderType      ReminderType?   @default(GENERAL)
+  categoryId        String?
+  thresholdAmount   Decimal?        @db.Decimal(10, 2)
+  transactionType   TransactionType?
+  transactionAmount Decimal?        @db.Decimal(10, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category          Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   
   @@index([userId, completed, dueDate])
+  @@index([userId, reminderType, completed])
+  @@index([categoryId])
   @@map("reminders")
+}
+
+enum ReminderType {
+  GENERAL
+  TRANSACTION
+  THRESHOLD
 }
 
 model UserSettings {

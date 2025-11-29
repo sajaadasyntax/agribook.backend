@@ -7,6 +7,7 @@ import {
   TransactionFilters,
   PaginatedResponse,
 } from '../types';
+import notificationService from './notification.service';
 import { Transaction } from '@prisma/client';
 
 export class TransactionService {
@@ -157,6 +158,23 @@ export class TransactionService {
         amount: transaction.amount,
       });
 
+      // Check threshold reminders for expense transactions
+      if (transaction.type === 'EXPENSE') {
+        notificationService
+          .checkThresholdReminders(
+            userId,
+            data.categoryId,
+            Number(transaction.amount)
+          )
+          .catch((error) => {
+            logError('Error checking threshold reminders', error, {
+              userId,
+              categoryId: data.categoryId,
+              amount: transaction.amount,
+            });
+          });
+      }
+
       return transaction;
     } catch (error) {
       if (error instanceof NotFoundError || error instanceof BadRequestError) {
@@ -229,6 +247,26 @@ export class TransactionService {
       });
 
       logInfo('Transaction updated successfully', { transactionId });
+
+      // Check threshold reminders for expense transactions if amount or category changed
+      if (
+        existing.type === 'EXPENSE' &&
+        (data.amount !== undefined || data.categoryId !== undefined)
+      ) {
+        const finalAmount = data.amount !== undefined ? Number(data.amount) : Number(existing.amount);
+        const finalCategoryId = data.categoryId || existing.categoryId;
+
+        notificationService
+          .checkThresholdReminders(userId, finalCategoryId, finalAmount)
+          .catch((error) => {
+            logError('Error checking threshold reminders', error, {
+              userId,
+              categoryId: finalCategoryId,
+              amount: finalAmount,
+            });
+          });
+      }
+
       return transaction;
     } catch (error) {
       if (error instanceof NotFoundError || error instanceof BadRequestError) {

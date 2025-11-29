@@ -29,6 +29,9 @@ export class ReminderService {
 
       const reminders = await prisma.reminder.findMany({
         where,
+        include: {
+          category: true,
+        },
         orderBy: {
           dueDate: 'asc',
         },
@@ -50,6 +53,9 @@ export class ReminderService {
         where: {
           id: reminderId,
           userId,
+        },
+        include: {
+          category: true,
         },
       });
 
@@ -82,6 +88,14 @@ export class ReminderService {
           description: data.description,
           dueDate: new Date(data.dueDate),
           userId,
+          reminderType: data.reminderType || 'GENERAL',
+          categoryId: data.categoryId,
+          thresholdAmount: data.thresholdAmount,
+          transactionType: data.transactionType,
+          transactionAmount: data.transactionAmount,
+        },
+        include: {
+          category: true,
         },
       });
 
@@ -116,15 +130,23 @@ export class ReminderService {
         throw new NotFoundError('Reminder not found');
       }
 
-      const updateData: Partial<UpdateReminderDto> = {};
+      const updateData: any = {};
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined) updateData.description = data.description;
       if (data.dueDate !== undefined) updateData.dueDate = new Date(data.dueDate);
       if (data.completed !== undefined) updateData.completed = data.completed;
+      if (data.reminderType !== undefined) updateData.reminderType = data.reminderType;
+      if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+      if (data.thresholdAmount !== undefined) updateData.thresholdAmount = data.thresholdAmount;
+      if (data.transactionType !== undefined) updateData.transactionType = data.transactionType;
+      if (data.transactionAmount !== undefined) updateData.transactionAmount = data.transactionAmount;
 
       const updated = await prisma.reminder.update({
         where: { id: reminderId },
         data: updateData,
+        include: {
+          category: true,
+        },
       });
 
       logInfo('Reminder updated successfully', { reminderId });
