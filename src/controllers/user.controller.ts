@@ -6,10 +6,10 @@ import { logInfo } from '../utils/logger';
 
 export class UserController {
   createOrGetUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { email, name, phone } = req.body;
-    logInfo('Create/get user request', { email, name });
+    const { email, name, phone, companyName, logoUrl } = req.body;
+    logInfo('Create/get user request', { email, name, companyName });
 
-    const result = await userService.createOrGetUser(email, name, phone);
+    const result = await userService.createOrGetUser(email, name, phone, companyName, logoUrl);
 
     res.status(201).json(result);
   });
@@ -19,6 +19,20 @@ export class UserController {
     logInfo('Get user by ID request', { userId: id });
 
     const user = await userService.getUserById(id);
+
+    res.json(user);
+  });
+
+  updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.id;
+    const { name, phone, companyName, logoUrl } = req.body;
+    logInfo('Update user request', { userId, fields: Object.keys(req.body) });
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const user = await userService.updateUser(userId, { name, phone, companyName, logoUrl });
 
     res.json(user);
   });

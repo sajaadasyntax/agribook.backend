@@ -3,9 +3,9 @@ import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors';
 import { logInfo, logError } from '../utils/logger';
 
 export class UserService {
-  async createOrGetUser(email?: string, name?: string, phone?: string) {
+  async createOrGetUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string) {
     try {
-      logInfo('Creating or getting user', { email, name });
+      logInfo('Creating or getting user', { email, name, companyName });
 
       let user = null;
 
@@ -25,9 +25,23 @@ export class UserService {
             email: email || undefined,
             name: name || 'User',
             phone: phone || undefined,
+            companyName: companyName || undefined,
+            logoUrl: logoUrl || undefined,
           },
         });
         logInfo('User created', { userId: user.id, email: user.email });
+      } else {
+        // Update existing user with company data if provided
+        if (companyName || logoUrl) {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              ...(companyName && { companyName }),
+              ...(logoUrl && { logoUrl }),
+            },
+          });
+          logInfo('User updated with company data', { userId: user.id });
+        }
       }
 
       // Ensure default settings exist
@@ -98,6 +112,28 @@ export class UserService {
       }
       logError('Error fetching user', error, { userId });
       throw new DatabaseError('Failed to fetch user');
+    }
+  }
+
+  async updateUser(userId: string, data: { name?: string; phone?: string; companyName?: string; logoUrl?: string }) {
+    try {
+      logInfo('Updating user', { userId, fields: Object.keys(data) });
+
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.phone !== undefined && { phone: data.phone }),
+          ...(data.companyName !== undefined && { companyName: data.companyName }),
+          ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+        },
+      });
+
+      logInfo('User updated successfully', { userId });
+      return user;
+    } catch (error) {
+      logError('Error updating user', error, { userId, data });
+      throw new DatabaseError('Failed to update user');
     }
   }
 }
