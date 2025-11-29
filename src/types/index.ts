@@ -110,6 +110,11 @@ export interface CreateReminderDto {
   title: string;
   description?: string;
   dueDate: Date;
+  reminderType?: 'GENERAL' | 'TRANSACTION' | 'THRESHOLD';
+  categoryId?: string;
+  thresholdAmount?: number;
+  transactionType?: 'INCOME' | 'EXPENSE';
+  transactionAmount?: number;
 }
 
 export interface UpdateReminderDto {
@@ -117,6 +122,17 @@ export interface UpdateReminderDto {
   description?: string;
   dueDate?: Date;
   completed?: boolean;
+  reminderType?: 'GENERAL' | 'TRANSACTION' | 'THRESHOLD';
+  categoryId?: string;
+  thresholdAmount?: number;
+  transactionType?: 'INCOME' | 'EXPENSE';
+  transactionAmount?: number;
+}
+
+export interface CreateCategoryDto {
+  name: string;
+  type: 'INCOME' | 'EXPENSE';
+  description?: string;
 }
 
 export interface UpdateSettingsDto {

@@ -9,6 +9,22 @@ Complete step-by-step guide for deploying AgriBooks backend on Ubuntu VPS with l
 - Domain name (optional, but recommended for production)
 - SSH access to your VPS
 
+## Architecture Overview
+
+The deployment uses:
+- **PostgreSQL**: Local database server
+- **Node.js 20**: Runtime for the application
+- **PM2**: Process manager for Node.js
+- **Nginx**: Reverse proxy and web server (handles SSL, static files, and routes traffic to the API)
+
+## Architecture Overview
+
+The deployment uses:
+- **PostgreSQL**: Local database server
+- **Node.js 20**: Runtime for the application
+- **PM2**: Process manager for Node.js
+- **Nginx**: Reverse proxy and web server (handles SSL, static files, and routes traffic to the API)
+
 ---
 
 ## Step 1: Initial Server Setup
@@ -35,9 +51,9 @@ su - agribooks
 ```bash
 # Install UFW (Uncomplicated Firewall)
 sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp   # HTTP
-sudo ufw allow 443/tcp   # HTTPS
-sudo ufw allow 3001/tcp # API (optional, if not using reverse proxy)
+sudo ufw allow 80/tcp   # HTTP (for Nginx)
+sudo ufw allow 443/tcp  # HTTPS (for Nginx with SSL)
+# Note: Port 3001 is not exposed externally - Nginx reverse proxy handles all traffic
 sudo ufw enable
 sudo ufw status
 ```
@@ -116,16 +132,16 @@ psql -U agribooks -h localhost -d agribooks
 
 ## Step 3: Install Node.js
 
-### 3.1 Install Node.js 18 LTS
+### 3.1 Install Node.js 20 LTS
 
 ```bash
-# Install Node.js 18.x
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Verify installation
-node -v  # Should show v18.x.x
-npm -v   # Should show 9.x.x or later
+node -v  # Should show v20.x.x
+npm -v   # Should show 10.x.x or later
 ```
 
 ### 3.2 Install PM2 Globally
@@ -173,8 +189,11 @@ scp -r ./backend/* agribooks@your-server-ip:/var/www/agribooks/
 
 ```bash
 cd /var/www/agribooks
-npm install --production
+# Install ALL dependencies (including dev) - needed for building TypeScript
+npm install
 ```
+
+**Note**: We install all dependencies (including devDependencies) because TypeScript and other build tools are needed to compile the application. After building, the `dist/` folder contains the compiled JavaScript, so dev dependencies are not needed at runtime, but keeping them doesn't hurt.
 
 ### 4.4 Create Environment File
 
@@ -187,7 +206,7 @@ Update `.env` with your production values:
 
 ```env
 # Database Configuration
-DATABASE_URL="postgresql://agribooks:your_secure_password@localhost:5432/agribooks?schema=public"
+DATABASE_URL="postgresql://agribooks:agribooks123@localhost:5432/agribooks?schema=public"
 
 # JWT Secret - Generate a strong secret
 # Run: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
@@ -207,7 +226,7 @@ MAX_FILE_SIZE=5242880
 
 # CORS Configuration
 # Replace with your actual domain(s)
-CORS_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+CORS_ORIGINS=https://getbk.xyz,https://app.getbk.xyz
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000
@@ -224,10 +243,26 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ### 4.6 Build Application
 
 ```bash
+# Build TypeScript to JavaScript
 npm run build
+
+# Verify build was successful
+ls -la dist/
+# You should see compiled .js files in the dist directory
 ```
 
-### 4.7 Run Database Migrations
+### 4.7 (Optional) Remove Dev Dependencies After Build
+
+If you want to save disk space, you can remove dev dependencies after building:
+
+```bash
+# Remove dev dependencies (optional)
+npm prune --production
+```
+
+**Note**: This step is optional. Keeping dev dependencies allows you to rebuild without reinstalling.
+
+### 4.8 Run Database Migrations
 
 ```bash
 # Generate Prisma client
@@ -237,13 +272,13 @@ npm run prisma:generate
 npm run prisma:migrate:prod
 ```
 
-### 4.8 Seed Database (Optional)
+### 4.9 Seed Database (Optional)
 
 ```bash
 npm run prisma:seed
 ```
 
-### 4.9 Create Required Directories
+### 4.10 Create Required Directories
 
 ```bash
 mkdir -p uploads logs
@@ -289,12 +324,19 @@ pm2 reload agribooks-api     # Zero-downtime reload
 
 ## Step 6: Install and Configure Nginx
 
+Nginx will act as a reverse proxy, handling:
+- SSL/HTTPS termination
+- Routing requests to the Node.js API
+- Serving static files (uploads)
+- Load balancing (if needed in the future)
+
 ### 6.1 Install Nginx
 
 ```bash
 sudo apt install -y nginx
 sudo systemctl start nginx
 sudo systemctl enable nginx
+sudo systemctl status nginx
 ```
 
 ### 6.2 Create Nginx Configuration
@@ -308,7 +350,7 @@ Add the following configuration:
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;  # Replace with your domain or IP
+    server_name getbk.xyz;  # Replace with your domain or IP
 
     # Redirect HTTP to HTTPS (after SSL setup)
     # return 301 https://$server_name$request_uri;
@@ -344,12 +386,29 @@ server {
 }
 ```
 
-### 6.3 Enable Site
+### 6.3 Remove Default Nginx Site (Optional)
+
+```bash
+# Remove the default Nginx site if you don't need it
+sudo rm /etc/nginx/sites-enabled/default
+```
+
+### 6.4 Enable Site
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/agribooks /etc/nginx/sites-enabled/
 sudo nginx -t  # Test configuration
 sudo systemctl reload nginx
+```
+
+### 6.5 Verify Nginx is Working
+
+```bash
+# Test from server
+curl http://getbk.xyz/api/health
+
+# Test from your local machine (replace with your server IP or domain)
+curl http://your-server-ip/api/health
 ```
 
 ---
@@ -365,7 +424,7 @@ sudo apt install -y certbot python3-certbot-nginx
 ### 7.2 Obtain SSL Certificate
 
 ```bash
-sudo certbot --nginx -d your-domain.com
+sudo certbot --nginx -d getbk.xyz
 # Follow the prompts
 # Enter your email address
 # Agree to terms
@@ -512,8 +571,8 @@ cd /var/www/agribooks
 # Pull latest changes (if using git)
 git pull
 
-# Install dependencies
-npm install --production
+# Install dependencies (including dev for building)
+npm install
 
 # Build
 npm run build
@@ -638,10 +697,17 @@ sudo systemctl status postgresql
 sudo systemctl status nginx
 pm2 status
 
+# Nginx Commands
+sudo systemctl restart nginx      # Restart Nginx
+sudo nginx -t                     # Test Nginx configuration
+sudo systemctl reload nginx       # Reload Nginx (no downtime)
+sudo tail -f /var/log/nginx/access.log   # View access logs
+sudo tail -f /var/log/nginx/error.log    # View error logs
+
 # Update Application
 cd /var/www/agribooks
 git pull
-npm install --production
+npm install  # Install all dependencies (needed for building)
 npm run build
 npm run prisma:migrate:prod
 pm2 restart agribooks-api
@@ -654,7 +720,7 @@ pm2 restart agribooks-api
 - [ ] Server updated and secured
 - [ ] PostgreSQL installed and configured
 - [ ] Database and user created
-- [ ] Node.js 18+ installed
+- [ ] Node.js 20+ installed
 - [ ] PM2 installed and configured
 - [ ] Application deployed to `/var/www/agribooks`
 - [ ] Environment variables configured in `.env`
@@ -662,7 +728,10 @@ pm2 restart agribooks-api
 - [ ] Application built (`npm run build`)
 - [ ] Database migrations run
 - [ ] Application running with PM2
+- [ ] Nginx installed and enabled
 - [ ] Nginx configured as reverse proxy
+- [ ] Nginx configuration tested (`sudo nginx -t`)
+- [ ] Nginx serving API through reverse proxy
 - [ ] SSL certificate installed (if using domain)
 - [ ] Firewall configured
 - [ ] Backup script setup

@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Ubuntu 20.04 LTS or later
-- Node.js 18+ (LTS recommended)
+- Node.js 20+ (LTS recommended)
 - PostgreSQL 14+
 - PM2 (Process Manager)
 - Nginx (Reverse Proxy)
@@ -17,9 +17,9 @@
 sudo apt update && sudo apt upgrade -y
 ```
 
-### Install Node.js 18 LTS
+### Install Node.js 20 LTS
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 node -v  # Verify installation
 ```
