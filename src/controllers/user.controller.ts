@@ -3,7 +3,6 @@ import { AuthenticatedRequest } from '../types';
 import userService from '../services/user.service';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { logInfo } from '../utils/logger';
-import { uploadLogo } from '../utils/upload';
 
 export class UserController {
   createOrGetUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -52,7 +51,7 @@ export class UserController {
       logoFilename
     );
 
-    res.json(user);
+    return res.json(user);
   });
 }
 

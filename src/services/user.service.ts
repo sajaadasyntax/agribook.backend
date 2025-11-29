@@ -29,22 +29,12 @@ export class UserService {
             companyName: companyName || undefined,
             logoUrl: logoUrl || undefined,
           },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            phone: true,
-            companyName: true,
-            logoUrl: true,
-            createdAt: true,
-            updatedAt: true,
-          },
         });
         
         logInfo('User created', { userId: user.id, email: user.email });
         
         // Return user with full logo URL if it exists
-        const userWithLogoUrl = {
+        user = {
           ...user,
           logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
         };
@@ -57,16 +47,6 @@ export class UserService {
               ...(companyName && { companyName }),
               ...(logoUrl && { logoUrl }),
             },
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              phone: true,
-              companyName: true,
-              logoUrl: true,
-              createdAt: true,
-              updatedAt: true,
-            },
           });
           
           logInfo('User updated with company data', { userId: user.id });
@@ -76,7 +56,6 @@ export class UserService {
             ...user,
             logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
           };
-          user = userWithLogoUrl;
         }
       }
 
@@ -113,34 +92,8 @@ export class UserService {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          phone: true,
-          companyName: true,
-          logoUrl: true,
-          createdAt: true,
-          updatedAt: true,
-          settings: {
-            select: {
-              id: true,
-              userId: true,
-              language: true,
-              darkMode: true,
-              autoBackup: true,
-              offlineMode: true,
-              autoSync: true,
-              pushNotifications: true,
-              emailNotifications: true,
-              expenseThresholdAlert: true,
-              expenseThreshold: true,
-              pinEnabled: true,
-              fingerprintEnabled: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
+        include: {
+          settings: true,
         },
       });
 
@@ -191,17 +144,14 @@ export class UserService {
       // Get existing user to delete old logo file
       const existingUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { 
-          id: true,
-          logoUrl: true,
-        },
       });
 
       // If uploading a new logo file, process it and get the URL
-      let logoUrl = data.logoUrl;
+      let logoUrl: string | null | undefined = data.logoUrl;
       if (logoFilename) {
         await fileService.processLogoFile(logoFilename);
-        logoUrl = fileService.getLogoUrl(logoFilename);
+        const fileUrl = fileService.getLogoUrl(logoFilename);
+        logoUrl = fileUrl; // fileUrl is string | null
         
         // Delete old logo file if it exists and is different
         if (existingUser?.logoUrl && existingUser.logoUrl !== logoUrl) {
@@ -209,6 +159,7 @@ export class UserService {
         }
       } else if (data.logoUrl === null || data.logoUrl === '') {
         // If logoUrl is explicitly set to null or empty, delete the old file
+        logoUrl = null;
         if (existingUser?.logoUrl) {
           fileService.deleteLogoFile(existingUser.logoUrl);
         }
@@ -220,17 +171,7 @@ export class UserService {
           ...(data.name !== undefined && { name: data.name }),
           ...(data.phone !== undefined && { phone: data.phone }),
           ...(data.companyName !== undefined && { companyName: data.companyName }),
-          ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          phone: true,
-          companyName: true,
-          logoUrl: true,
-          createdAt: true,
-          updatedAt: true,
+          ...(logoUrl !== undefined && { logoUrl }),
         },
       });
 
