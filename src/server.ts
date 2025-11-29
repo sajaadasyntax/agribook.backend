@@ -43,6 +43,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads/logos', express.static(path.join(__dirname, '../uploads/logos')));
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

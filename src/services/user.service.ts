@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors';
 import { logInfo, logError } from '../utils/logger';
+import fileService from './file.service';
 
 export class UserService {
   async createOrGetUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string) {
@@ -29,6 +30,12 @@ export class UserService {
             logoUrl: logoUrl || undefined,
           },
         });
+        
+        // Return user with full logo URL if it exists
+        if (user.logoUrl) {
+          user.logoUrl = fileService.getLogoUrl(user.logoUrl) || user.logoUrl;
+        }
+        
         logInfo('User created', { userId: user.id, email: user.email });
       } else {
         // Update existing user with company data if provided
@@ -40,6 +47,12 @@ export class UserService {
               ...(logoUrl && { logoUrl }),
             },
           });
+          
+          // Return user with full logo URL if it exists
+          if (user.logoUrl) {
+            user.logoUrl = fileService.getLogoUrl(user.logoUrl) || user.logoUrl;
+          }
+          
           logInfo('User updated with company data', { userId: user.id });
         }
       }
@@ -86,6 +99,7 @@ export class UserService {
       const { settings, ...userWithoutSettings } = user;
       const safeUser = {
         ...userWithoutSettings,
+        logoUrl: fileService.getLogoUrl(user.logoUrl) || user.logoUrl,
         settings: settings ? {
           id: settings.id,
           userId: settings.userId,
@@ -115,9 +129,32 @@ export class UserService {
     }
   }
 
-  async updateUser(userId: string, data: { name?: string; phone?: string; companyName?: string; logoUrl?: string }) {
+  async updateUser(userId: string, data: { name?: string; phone?: string; companyName?: string; logoUrl?: string }, logoFilename?: string) {
     try {
-      logInfo('Updating user', { userId, fields: Object.keys(data) });
+      logInfo('Updating user', { userId, fields: Object.keys(data), hasLogoFile: !!logoFilename });
+
+      // Get existing user to delete old logo file
+      const existingUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { logoUrl: true },
+      });
+
+      // If uploading a new logo file, process it and get the URL
+      let logoUrl = data.logoUrl;
+      if (logoFilename) {
+        await fileService.processLogoFile(logoFilename);
+        logoUrl = fileService.getLogoUrl(logoFilename);
+        
+        // Delete old logo file if it exists and is different
+        if (existingUser?.logoUrl && existingUser.logoUrl !== logoUrl) {
+          fileService.deleteLogoFile(existingUser.logoUrl);
+        }
+      } else if (data.logoUrl === null || data.logoUrl === '') {
+        // If logoUrl is explicitly set to null or empty, delete the old file
+        if (existingUser?.logoUrl) {
+          fileService.deleteLogoFile(existingUser.logoUrl);
+        }
+      }
 
       const user = await prisma.user.update({
         where: { id: userId },
@@ -125,12 +162,18 @@ export class UserService {
           ...(data.name !== undefined && { name: data.name }),
           ...(data.phone !== undefined && { phone: data.phone }),
           ...(data.companyName !== undefined && { companyName: data.companyName }),
-          ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+          ...(logoUrl !== undefined && { logoUrl }),
         },
       });
 
+      // Return user with full logo URL
+      const userWithLogoUrl = {
+        ...user,
+        logoUrl: fileService.getLogoUrl(user.logoUrl) || user.logoUrl,
+      };
+
       logInfo('User updated successfully', { userId });
-      return user;
+      return userWithLogoUrl;
     } catch (error) {
       logError('Error updating user', error, { userId, data });
       throw new DatabaseError('Failed to update user');
