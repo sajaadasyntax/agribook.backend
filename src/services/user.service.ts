@@ -29,14 +29,25 @@ export class UserService {
             companyName: companyName || undefined,
             logoUrl: logoUrl || undefined,
           },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            phone: true,
+            companyName: true,
+            logoUrl: true,
+            createdAt: true,
+            updatedAt: true,
+          },
         });
         
-        // Return user with full logo URL if it exists
-        if (user.logoUrl) {
-          user.logoUrl = fileService.getLogoUrl(user.logoUrl) || user.logoUrl;
-        }
-        
         logInfo('User created', { userId: user.id, email: user.email });
+        
+        // Return user with full logo URL if it exists
+        const userWithLogoUrl = {
+          ...user,
+          logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
+        };
       } else {
         // Update existing user with company data if provided
         if (companyName || logoUrl) {
@@ -46,14 +57,26 @@ export class UserService {
               ...(companyName && { companyName }),
               ...(logoUrl && { logoUrl }),
             },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              phone: true,
+              companyName: true,
+              logoUrl: true,
+              createdAt: true,
+              updatedAt: true,
+            },
           });
           
-          // Return user with full logo URL if it exists
-          if (user.logoUrl) {
-            user.logoUrl = fileService.getLogoUrl(user.logoUrl) || user.logoUrl;
-          }
-          
           logInfo('User updated with company data', { userId: user.id });
+          
+          // Return user with full logo URL if it exists
+          user = {
+            ...user,
+            logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
+          };
+          user = userWithLogoUrl;
         }
       }
 
@@ -68,7 +91,13 @@ export class UserService {
 
       logInfo('User settings ensured', { userId: user.id });
 
-      return { user, settings };
+      return { 
+        user: {
+          ...user,
+          logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
+        },
+        settings 
+      };
     } catch (error) {
       logError('Error creating or getting user', error, { email, name });
       if (error instanceof Error && error.message.includes('Unique constraint')) {
@@ -84,8 +113,34 @@ export class UserService {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        include: {
-          settings: true,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          phone: true,
+          companyName: true,
+          logoUrl: true,
+          createdAt: true,
+          updatedAt: true,
+          settings: {
+            select: {
+              id: true,
+              userId: true,
+              language: true,
+              darkMode: true,
+              autoBackup: true,
+              offlineMode: true,
+              autoSync: true,
+              pushNotifications: true,
+              emailNotifications: true,
+              expenseThresholdAlert: true,
+              expenseThreshold: true,
+              pinEnabled: true,
+              fingerprintEnabled: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
         },
       });
 
@@ -136,7 +191,10 @@ export class UserService {
       // Get existing user to delete old logo file
       const existingUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { logoUrl: true },
+        select: { 
+          id: true,
+          logoUrl: true,
+        },
       });
 
       // If uploading a new logo file, process it and get the URL
@@ -162,7 +220,17 @@ export class UserService {
           ...(data.name !== undefined && { name: data.name }),
           ...(data.phone !== undefined && { phone: data.phone }),
           ...(data.companyName !== undefined && { companyName: data.companyName }),
-          ...(logoUrl !== undefined && { logoUrl }),
+          ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          phone: true,
+          companyName: true,
+          logoUrl: true,
+          createdAt: true,
+          updatedAt: true,
         },
       });
 
