@@ -16,7 +16,7 @@ export class UserController {
 
     const result = await userService.loginUser(email, phone);
 
-    res.status(200).json(result);
+    return res.status(200).json(result);
   });
 
   registerUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -36,7 +36,7 @@ export class UserController {
 
     const result = await userService.registerUser(email, name, phone, companyName, undefined, logoFilename);
 
-    res.status(201).json(result);
+    return res.status(201).json(result);
   });
 
   createOrGetUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -56,7 +56,7 @@ export class UserController {
 
     const result = await userService.createOrGetUser(email, name, phone, companyName, undefined, logoFilename);
 
-    res.status(201).json(result);
+    return res.status(201).json(result);
   });
 
   getUserById = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -65,7 +65,7 @@ export class UserController {
 
     const user = await userService.getUserById(id);
 
-    res.json(user);
+    return res.json(user);
   });
 
   updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
