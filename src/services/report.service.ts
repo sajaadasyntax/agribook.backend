@@ -116,9 +116,19 @@ export class ReportService {
 
   async getWeeklyReport(userId: string, weekStart?: Date): Promise<WeeklyReport> {
     try {
-      const startDate = weekStart || new Date();
-      startDate.setDate(startDate.getDate() - startDate.getDay());
-      startDate.setHours(0, 0, 0, 0);
+      let startDate: Date;
+      if (weekStart) {
+        // Use the provided weekStart date directly (already calculated as Saturday by frontend)
+        startDate = new Date(weekStart);
+        startDate.setHours(0, 0, 0, 0);
+      } else {
+        // If no weekStart provided, calculate from current date (default to Saturday start)
+        startDate = new Date();
+        const day = startDate.getDay(); // 0 = Sunday, 6 = Saturday
+        const daysToSubtract = day === 6 ? 0 : (day + 1) % 7;
+        startDate.setDate(startDate.getDate() - daysToSubtract);
+        startDate.setHours(0, 0, 0, 0);
+      }
 
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + 6);
