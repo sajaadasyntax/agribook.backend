@@ -43,14 +43,53 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Serve uploaded files with caching headers
+// Serve uploaded files with proper headers for Android compatibility
 // In production, consider using UPLOADS_DIR env var for persistent storage
 const uploadsPath = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadsPath, {
+
+// Custom middleware to add proper headers for image files
+app.use('/uploads', (req, res, next) => {
+  // Set CORS headers for image requests
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  
+  // Set cache headers
+  res.header('Cache-Control', 'public, max-age=86400'); // 1 day
+  
+  // Determine Content-Type based on file extension
+  const url = req.url.toLowerCase();
+  if (url.endsWith('.jpg') || url.endsWith('.jpeg')) {
+    res.header('Content-Type', 'image/jpeg');
+  } else if (url.endsWith('.png')) {
+    res.header('Content-Type', 'image/png');
+  } else if (url.endsWith('.gif')) {
+    res.header('Content-Type', 'image/gif');
+  } else if (url.endsWith('.webp')) {
+    res.header('Content-Type', 'image/webp');
+  }
+  
+  next();
+}, express.static(uploadsPath, {
   maxAge: '1d', // Cache for 1 day
   etag: true,
   lastModified: true,
   immutable: false, // Files can be updated
+  setHeaders: (res, filePath) => {
+    // Ensure Content-Type is set correctly
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    
+    if (mimeTypes[ext]) {
+      res.setHeader('Content-Type', mimeTypes[ext]);
+    }
+  },
 }));
 
 // Health check endpoint (with database connectivity check)
