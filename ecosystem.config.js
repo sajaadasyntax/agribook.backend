@@ -1,7 +1,10 @@
+// Load .env file for PM2 (compatible with all PM2 versions)
+require('dotenv').config();
+
 module.exports = {
   apps: [
     {
-      name: 'agribooks-api',
+      name: 'agribook',
       script: 'dist/server.js',
       instances: 'max', // Use all available CPU cores
       exec_mode: 'cluster',
@@ -11,10 +14,20 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: 3001,
+        // Environment variables from .env will be inherited
+        // Explicitly set critical ones here if needed
+        ...(process.env.JWT_SECRET && { JWT_SECRET: process.env.JWT_SECRET }),
+        ...(process.env.JWT_REFRESH_SECRET && { JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET }),
+        ...(process.env.DATABASE_URL && { DATABASE_URL: process.env.DATABASE_URL }),
       },
       env_production: {
         NODE_ENV: 'production',
         PORT: 3001,
+        // Environment variables from .env will be inherited
+        // Explicitly set critical ones here if needed
+        ...(process.env.JWT_SECRET && { JWT_SECRET: process.env.JWT_SECRET }),
+        ...(process.env.JWT_REFRESH_SECRET && { JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET }),
+        ...(process.env.DATABASE_URL && { DATABASE_URL: process.env.DATABASE_URL }),
       },
       // Logging
       error_file: 'logs/pm2-error.log',
