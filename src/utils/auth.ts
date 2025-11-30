@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { logError } from './logger';
 
