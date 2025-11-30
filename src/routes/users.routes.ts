@@ -5,7 +5,7 @@ import { uploadLogo } from '../utils/upload';
 
 const router = Router();
 
-router.post('/', userController.createOrGetUser);
+router.post('/', uploadLogo.single('logo'), userController.createOrGetUser);
 router.get('/:id', userController.getUserById);
 router.put('/', authenticate, uploadLogo.single('logo'), userController.updateUser);
 

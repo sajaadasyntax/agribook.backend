@@ -6,10 +6,21 @@ import { logInfo } from '../utils/logger';
 
 export class UserController {
   createOrGetUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { email, name, phone, companyName, logoUrl } = req.body;
-    logInfo('Create/get user request', { email, name, companyName });
+    const { email, name, phone, companyName } = req.body;
+    const logoFile = (req as any).file; // File from multer
+    
+    logInfo('Create/get user request', { 
+      email, 
+      name, 
+      companyName,
+      hasFile: !!logoFile,
+      fileName: logoFile?.filename 
+    });
 
-    const result = await userService.createOrGetUser(email, name, phone, companyName, logoUrl);
+    // If logo file was uploaded, use the filename; otherwise logoUrl is undefined
+    const logoFilename = logoFile?.filename;
+
+    const result = await userService.createOrGetUser(email, name, phone, companyName, undefined, logoFilename);
 
     res.status(201).json(result);
   });

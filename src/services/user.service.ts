@@ -4,9 +4,17 @@ import { logInfo, logError } from '../utils/logger';
 import fileService from './file.service';
 
 export class UserService {
-  async createOrGetUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string) {
+  async createOrGetUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string, logoFilename?: string) {
     try {
-      logInfo('Creating or getting user', { email, name, companyName });
+      logInfo('Creating or getting user', { email, name, companyName, hasLogoFile: !!logoFilename });
+
+      // If uploading a new logo file, process it and get the URL
+      let finalLogoUrl: string | null | undefined = logoUrl;
+      if (logoFilename) {
+        await fileService.processLogoFile(logoFilename);
+        const fileUrl = fileService.getLogoUrl(logoFilename);
+        finalLogoUrl = fileUrl;
+      }
 
       let user = null;
 
@@ -26,36 +34,38 @@ export class UserService {
             email: email || undefined,
             name: name || 'User',
             phone: phone || undefined,
-            companyName: companyName || undefined,
-            logoUrl: logoUrl || undefined,
+            ...(companyName && { companyName }),
+            ...(finalLogoUrl && { logoUrl: finalLogoUrl }),
           },
         });
         
         logInfo('User created', { userId: user.id, email: user.email });
         
         // Return user with full logo URL if it exists
+        const userLogoUrl = (user as any).logoUrl;
         user = {
           ...user,
-          logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
-        };
+          logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
+        } as typeof user;
       } else {
         // Update existing user with company data if provided
-        if (companyName || logoUrl) {
+        if (companyName || finalLogoUrl) {
           user = await prisma.user.update({
             where: { id: user.id },
             data: {
               ...(companyName && { companyName }),
-              ...(logoUrl && { logoUrl }),
+              ...(finalLogoUrl && { logoUrl: finalLogoUrl }),
             },
           });
           
           logInfo('User updated with company data', { userId: user.id });
           
           // Return user with full logo URL if it exists
+          const userLogoUrl = (user as any).logoUrl;
           user = {
             ...user,
-            logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
-          };
+            logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
+          } as typeof user;
         }
       }
 
@@ -70,10 +80,11 @@ export class UserService {
 
       logInfo('User settings ensured', { userId: user.id });
 
+      const userLogoUrl = (user as any).logoUrl;
       return { 
         user: {
           ...user,
-          logoUrl: user.logoUrl ? (fileService.getLogoUrl(user.logoUrl) || user.logoUrl) : user.logoUrl,
+          logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
         },
         settings 
       };
@@ -105,9 +116,10 @@ export class UserService {
       // Remove pinHash from settings for security
       // Return a new object with settings without pinHash rather than mutating
       const { settings, ...userWithoutSettings } = user;
+      const userLogoUrl = (user as any).logoUrl;
       const safeUser = {
         ...userWithoutSettings,
-        logoUrl: fileService.getLogoUrl(user.logoUrl) || user.logoUrl,
+        logoUrl: fileService.getLogoUrl(userLogoUrl) || userLogoUrl,
         settings: settings ? {
           id: settings.id,
           userId: settings.userId,
@@ -154,14 +166,16 @@ export class UserService {
         logoUrl = fileUrl; // fileUrl is string | null
         
         // Delete old logo file if it exists and is different
-        if (existingUser?.logoUrl && existingUser.logoUrl !== logoUrl) {
-          fileService.deleteLogoFile(existingUser.logoUrl);
+        const existingLogoUrl = (existingUser as any)?.logoUrl;
+        if (existingLogoUrl && existingLogoUrl !== logoUrl) {
+          fileService.deleteLogoFile(existingLogoUrl);
         }
       } else if (data.logoUrl === null || data.logoUrl === '') {
         // If logoUrl is explicitly set to null or empty, delete the old file
         logoUrl = null;
-        if (existingUser?.logoUrl) {
-          fileService.deleteLogoFile(existingUser.logoUrl);
+        const existingLogoUrl = (existingUser as any)?.logoUrl;
+        if (existingLogoUrl) {
+          fileService.deleteLogoFile(existingLogoUrl);
         }
       }
 
@@ -176,9 +190,10 @@ export class UserService {
       });
 
       // Return user with full logo URL
+      const userLogoUrl = (user as any).logoUrl;
       const userWithLogoUrl = {
         ...user,
-        logoUrl: fileService.getLogoUrl(user.logoUrl) || user.logoUrl,
+        logoUrl: fileService.getLogoUrl(userLogoUrl) || userLogoUrl,
       };
 
       logInfo('User updated successfully', { userId });
