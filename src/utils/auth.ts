@@ -54,11 +54,9 @@ export const generateAccessToken = (userId: string, email?: string): string => {
     type: 'access',
   };
   
-  const options: SignOptions = {
-    expiresIn: JWT_EXPIRES_IN as string | number,
-  };
-  
-  return jwt.sign(payload, JWT_SECRET, options);
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+  } as any);
 };
 
 /**
@@ -71,11 +69,9 @@ export const generateRefreshToken = (userId: string, email?: string): string => 
     type: 'refresh',
   };
   
-  const options: SignOptions = {
-    expiresIn: JWT_REFRESH_EXPIRES_IN as string | number,
-  };
-  
-  return jwt.sign(payload, JWT_REFRESH_SECRET, options);
+  return jwt.sign(payload, JWT_REFRESH_SECRET, {
+    expiresIn: JWT_REFRESH_EXPIRES_IN,
+  } as any);
 };
 
 /**
