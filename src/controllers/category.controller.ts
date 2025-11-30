@@ -19,7 +19,7 @@ export class CategoryController {
       type as 'INCOME' | 'EXPENSE' | undefined
     );
 
-    res.json(categories);
+    return res.json(categories);
   });
 
   getCategoryById = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -33,7 +33,7 @@ export class CategoryController {
 
     const category = await categoryService.getCategoryById(id, userId);
 
-    res.json(category);
+    return res.json(category);
   });
 
   createCategory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -47,7 +47,7 @@ export class CategoryController {
 
     const category = await categoryService.createCategory(data, userId);
 
-    res.status(201).json(category);
+    return res.status(201).json(category);
   });
 
   deleteCategory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -61,7 +61,7 @@ export class CategoryController {
 
     const result = await categoryService.deleteCategory(id, userId);
 
-    res.json(result);
+    return res.json(result);
   });
 }
 
