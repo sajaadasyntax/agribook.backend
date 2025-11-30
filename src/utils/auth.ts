@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { logError } from './logger';
 
@@ -54,7 +54,11 @@ export const generateAccessToken = (userId: string, email?: string): string => {
     type: 'access',
   };
   
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const options: SignOptions = {
+    expiresIn: JWT_EXPIRES_IN,
+  };
+  
+  return jwt.sign(payload, JWT_SECRET, options);
 };
 
 /**
@@ -67,7 +71,11 @@ export const generateRefreshToken = (userId: string, email?: string): string => 
     type: 'refresh',
   };
   
-  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
+  const options: SignOptions = {
+    expiresIn: JWT_REFRESH_EXPIRES_IN,
+  };
+  
+  return jwt.sign(payload, JWT_REFRESH_SECRET, options);
 };
 
 /**

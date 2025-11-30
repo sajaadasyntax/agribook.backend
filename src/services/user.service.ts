@@ -94,8 +94,7 @@ export class UserService {
       // Generate tokens
       const tokens = generateTokenPair(user.id, user.email || undefined);
       
-      // Store refresh token in database (after Prisma regeneration)
-      // @ts-expect-error - RefreshToken model available after migration
+      // Store refresh token in database
       await prisma.refreshToken.create({
         data: {
           token: tokens.refreshToken,
@@ -104,7 +103,7 @@ export class UserService {
         },
       });
 
-      const userLogoUrl = (user as any).logoUrl;
+      const userLogoUrl = user.logoUrl;
       return { 
         user: {
           ...user,
@@ -185,14 +184,13 @@ export class UserService {
       // Hash password if provided
       const hashedPassword = password ? await hashPassword(password) : undefined;
 
-      // Create new user (password field available after migration)
+      // Create new user
       const user = await prisma.user.create({
         data: {
           email: email || undefined,
           name: name,
           phone: phone || undefined,
-          // @ts-expect-error - password field available after migration
-          password: hashedPassword,
+          password: hashedPassword || null,
           ...(companyName && { companyName }),
           ...(finalLogoUrl && { logoUrl: finalLogoUrl }),
         },
@@ -201,12 +199,12 @@ export class UserService {
       logInfo('User registered successfully', { userId: user.id, email: user.email });
       
       // Return user with full logo URL if it exists
-      const userLogoUrl = (user as any).logoUrl;
+      const userLogoUrl = user.logoUrl;
       const userWithLogo = {
         ...user,
-        password: undefined, // Never send password to client
+        password: null, // Never send password to client
         logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
-      } as typeof user;
+      };
 
       // Create default settings for new user
       const settings = await prisma.userSettings.create({
@@ -220,8 +218,7 @@ export class UserService {
       // Generate tokens
       const tokens = generateTokenPair(user.id, user.email || undefined);
       
-      // Store refresh token in database (after Prisma regeneration)
-      // @ts-expect-error - RefreshToken model available after migration
+      // Store refresh token in database
       await prisma.refreshToken.create({
         data: {
           token: tokens.refreshToken,
@@ -298,7 +295,7 @@ export class UserService {
         logInfo('User created', { userId: user.id, email: user.email });
         
         // Return user with full logo URL if it exists
-        const userLogoUrl = (user as any).logoUrl;
+        const userLogoUrl = user.logoUrl;
         user = {
           ...user,
           logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
@@ -317,7 +314,7 @@ export class UserService {
           logInfo('User updated with company data', { userId: user.id });
           
           // Return user with full logo URL if it exists
-          const userLogoUrl = (user as any).logoUrl;
+          const userLogoUrl = user.logoUrl;
           user = {
             ...user,
             logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
@@ -339,8 +336,7 @@ export class UserService {
       // Generate tokens
       const tokens = generateTokenPair(user.id, user.email || undefined);
       
-      // Store refresh token in database (after Prisma regeneration)
-      // @ts-expect-error - RefreshToken model available after migration
+      // Store refresh token in database
       await prisma.refreshToken.create({
         data: {
           token: tokens.refreshToken,
@@ -349,7 +345,7 @@ export class UserService {
         },
       });
 
-      const userLogoUrl = (user as any).logoUrl;
+      const userLogoUrl = user.logoUrl;
       return { 
         user: {
           ...user,
@@ -381,7 +377,6 @@ export class UserService {
       }
 
       // Check if refresh token exists in database and is not expired
-      // @ts-expect-error - RefreshToken model available after migration
       const storedToken = await prisma.refreshToken.findUnique({
         where: { token: refreshToken },
         include: { user: true },
@@ -393,7 +388,6 @@ export class UserService {
 
       if (storedToken.expiresAt < new Date()) {
         // Clean up expired token
-        // @ts-expect-error - RefreshToken model available after migration
         await prisma.refreshToken.delete({ where: { id: storedToken.id } });
         throw new UnauthorizedError('Refresh token has expired');
       }
@@ -419,7 +413,6 @@ export class UserService {
    */
   async logout(refreshToken: string): Promise<void> {
     try {
-      // @ts-expect-error - RefreshToken model available after migration
       await prisma.refreshToken.deleteMany({
         where: { token: refreshToken },
       });
@@ -435,7 +428,6 @@ export class UserService {
    */
   async logoutAll(userId: string): Promise<void> {
     try {
-      // @ts-expect-error - RefreshToken model available after migration
       await prisma.refreshToken.deleteMany({
         where: { userId },
       });
@@ -461,11 +453,10 @@ export class UserService {
         throw new NotFoundError('User not found');
       }
 
-      // Remove sensitive data (password field available after migration)
-      // @ts-expect-error - password field available after migration
+      // Remove sensitive data
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { settings, password: _password, ...userWithoutSensitive } = user;
-      const userLogoUrl = (user as any).logoUrl;
+      const userLogoUrl = user.logoUrl;
       const safeUser = {
         ...userWithoutSensitive,
         logoUrl: fileService.getLogoUrl(userLogoUrl) || userLogoUrl,
@@ -539,7 +530,7 @@ export class UserService {
       });
 
       // Return user with full logo URL
-      const userLogoUrl = (user as any).logoUrl;
+      const userLogoUrl = user.logoUrl;
       const userWithLogoUrl = {
         ...user,
         password: undefined,
@@ -588,7 +579,6 @@ export class UserService {
       const hashedPassword = await hashPassword(newPassword);
       await prisma.user.update({
         where: { id: userId },
-        // @ts-expect-error - password field available after migration
         data: { password: hashedPassword },
       });
 
