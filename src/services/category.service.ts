@@ -5,11 +5,14 @@ import { CategoryType } from '@prisma/client';
 import { CreateCategoryDto } from '../types';
 
 export class CategoryService {
-  async getAllCategories(type?: CategoryType) {
+  async getAllCategories(userId: string, type?: CategoryType) {
     try {
-      logInfo('Fetching categories', { type });
+      logInfo('Fetching categories', { userId, type });
 
-      const where = type ? { type } : {};
+      const where: any = { userId };
+      if (type) {
+        where.type = type;
+      }
 
       const categories = await prisma.category.findMany({
         where,
@@ -18,45 +21,49 @@ export class CategoryService {
         },
       });
 
-      logInfo('Categories fetched successfully', { count: categories.length, type });
+      logInfo('Categories fetched successfully', { count: categories.length, userId, type });
       return categories;
     } catch (error) {
-      logError('Error fetching categories', error, { type });
+      logError('Error fetching categories', error, { userId, type });
       throw new DatabaseError('Failed to fetch categories');
     }
   }
 
-  async getCategoryById(categoryId: string) {
+  async getCategoryById(categoryId: string, userId: string) {
     try {
-      logInfo('Fetching category by ID', { categoryId });
+      logInfo('Fetching category by ID', { categoryId, userId });
 
-      const category = await prisma.category.findUnique({
-        where: { id: categoryId },
+      const category = await prisma.category.findFirst({
+        where: { 
+          id: categoryId,
+          userId: userId,
+        },
       });
 
       if (!category) {
-        logError('Category not found', new Error('Category not found'), { categoryId });
+        logError('Category not found', new Error('Category not found'), { categoryId, userId });
         throw new NotFoundError('Category not found');
       }
 
-      logInfo('Category fetched successfully', { categoryId, name: category.name });
+      logInfo('Category fetched successfully', { categoryId, name: category.name, userId });
       return category;
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
       }
-      logError('Error fetching category', error, { categoryId });
+      logError('Error fetching category', error, { categoryId, userId });
       throw new DatabaseError('Failed to fetch category');
     }
   }
 
-  async createCategory(data: CreateCategoryDto) {
+  async createCategory(data: CreateCategoryDto, userId: string) {
     try {
-      logInfo('Creating category', { name: data.name, type: data.type });
+      logInfo('Creating category', { name: data.name, type: data.type, userId });
 
-      // Check if category with same name and type already exists
+      // Check if category with same name and type already exists for this user
       const existing = await prisma.category.findFirst({
         where: {
+          userId: userId,
           name: data.name,
           type: data.type,
         },
@@ -73,27 +80,31 @@ export class CategoryService {
           name: data.name,
           type: data.type,
           description: data.description,
+          userId: userId,
         },
       });
 
-      logInfo('Category created successfully', { categoryId: category.id, name: category.name });
+      logInfo('Category created successfully', { categoryId: category.id, name: category.name, userId });
       return category;
     } catch (error) {
       if (error instanceof ValidationError) {
         throw error;
       }
-      logError('Error creating category', error, { data });
+      logError('Error creating category', error, { data, userId });
       throw new DatabaseError('Failed to create category');
     }
   }
 
-  async deleteCategory(categoryId: string) {
+  async deleteCategory(categoryId: string, userId: string) {
     try {
-      logInfo('Deleting category', { categoryId });
+      logInfo('Deleting category', { categoryId, userId });
 
-      // Check if category exists
-      const category = await prisma.category.findUnique({
-        where: { id: categoryId },
+      // Check if category exists and belongs to the user
+      const category = await prisma.category.findFirst({
+        where: { 
+          id: categoryId,
+          userId: userId,
+        },
         include: {
           transactions: {
             take: 1,
@@ -116,13 +127,13 @@ export class CategoryService {
         where: { id: categoryId },
       });
 
-      logInfo('Category deleted successfully', { categoryId });
+      logInfo('Category deleted successfully', { categoryId, userId });
       return { message: 'Category deleted successfully' };
     } catch (error) {
       if (error instanceof NotFoundError || error instanceof ValidationError) {
         throw error;
       }
-      logError('Error deleting category', error, { categoryId });
+      logError('Error deleting category', error, { categoryId, userId });
       throw new DatabaseError('Failed to delete category');
     }
   }

@@ -5,8 +5,7 @@ import { authenticate } from '../middleware/auth';
 const router = Router();
 
 // All routes require authentication for consistency
-// Note: Categories are global (not user-specific), but authentication ensures
-// only authenticated users can access/manage categories
+// Categories are user-specific - each user has their own categories
 router.use(authenticate);
 
 router.get('/', categoryController.getAllCategories);

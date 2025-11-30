@@ -28,25 +28,6 @@ async function main(): Promise<void> {
     { name: 'Other', type: 'EXPENSE' as const, description: 'Other expenses' },
   ];
 
-  console.log('📁 Creating categories...');
-  const createdCategories: { [key: string]: string } = {};
-
-  for (const category of [...incomeCategories, ...expenseCategories]) {
-    const created = await prisma.category.upsert({
-      where: {
-        name_type: {
-          name: category.name,
-          type: category.type,
-        },
-      },
-      update: {},
-      create: category,
-    });
-    createdCategories[`${category.name}_${category.type}`] = created.id;
-  }
-
-  console.log(`✅ Created ${incomeCategories.length + expenseCategories.length} categories`);
-
   // Create sample users
   console.log('👥 Creating sample users...');
   
@@ -89,6 +70,35 @@ async function main(): Promise<void> {
   }
 
   console.log(`✅ Created ${users.length} sample users`);
+
+  // Create categories for each user
+  console.log('📁 Creating categories for each user...');
+  const createdCategories: { [key: string]: string } = {};
+
+  for (const user of users) {
+    for (const category of [...incomeCategories, ...expenseCategories]) {
+      const created = await prisma.category.upsert({
+        where: {
+          userId_name_type: {
+            userId: user.id,
+            name: category.name,
+            type: category.type,
+          },
+        },
+        update: {},
+        create: {
+          ...category,
+          userId: user.id,
+        },
+      });
+      // Store category ID for the first user (used for transactions)
+      if (user.id === users[0].id) {
+        createdCategories[`${category.name}_${category.type}`] = created.id;
+      }
+    }
+  }
+
+  console.log(`✅ Created ${(incomeCategories.length + expenseCategories.length) * users.length} categories (${incomeCategories.length + expenseCategories.length} per user)`);
 
   // Create sample transactions for the first user
   console.log('💰 Creating sample transactions...');
@@ -242,7 +252,7 @@ async function main(): Promise<void> {
 
   console.log('\n✅ Database seeding completed successfully!');
   console.log(`\n📊 Summary:`);
-  console.log(`   - Categories: ${incomeCategories.length + expenseCategories.length}`);
+  console.log(`   - Categories: ${(incomeCategories.length + expenseCategories.length) * users.length} (${incomeCategories.length + expenseCategories.length} per user)`);
   console.log(`   - Users: ${users.length}`);
   console.log(`   - Transactions: ${transactions.length}`);
   console.log(`   - Alerts: ${alerts.length}`);

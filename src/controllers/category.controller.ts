@@ -6,10 +6,16 @@ import { logInfo } from '../utils/logger';
 
 export class CategoryController {
   getAllCategories = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
     const { type } = req.query;
-    logInfo('Get all categories request', { type });
+    logInfo('Get all categories request', { userId, type });
 
     const categories = await categoryService.getAllCategories(
+      userId,
       type as 'INCOME' | 'EXPENSE' | undefined
     );
 
@@ -17,28 +23,43 @@ export class CategoryController {
   });
 
   getCategoryById = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { id } = req.params;
-    logInfo('Get category by ID request', { categoryId: id });
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
 
-    const category = await categoryService.getCategoryById(id);
+    const { id } = req.params;
+    logInfo('Get category by ID request', { categoryId: id, userId });
+
+    const category = await categoryService.getCategoryById(id, userId);
 
     res.json(category);
   });
 
   createCategory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const data: CreateCategoryDto = req.body;
-    logInfo('Create category request', { name: data.name, type: data.type });
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
 
-    const category = await categoryService.createCategory(data);
+    const data: CreateCategoryDto = req.body;
+    logInfo('Create category request', { name: data.name, type: data.type, userId });
+
+    const category = await categoryService.createCategory(data, userId);
 
     res.status(201).json(category);
   });
 
   deleteCategory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { id } = req.params;
-    logInfo('Delete category request', { categoryId: id });
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
 
-    const result = await categoryService.deleteCategory(id);
+    const { id } = req.params;
+    logInfo('Delete category request', { categoryId: id, userId });
+
+    const result = await categoryService.deleteCategory(id, userId);
 
     res.json(result);
   });

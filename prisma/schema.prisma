@@ -26,6 +26,7 @@ model User {
   reminders     Reminder[]
   settings      UserSettings?
   refreshTokens RefreshToken[]
+  categories    Category[]
   
   @@map("users")
 }
@@ -49,13 +50,16 @@ model Category {
   name        String
   type        CategoryType
   description String?
+  userId      String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   reminders    Reminder[]
   
-  @@unique([name, type])
+  @@unique([userId, name, type])
+  @@index([userId])
   @@map("categories")
 }
 
