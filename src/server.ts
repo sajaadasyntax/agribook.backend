@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
-import { logInfo, logError } from './utils/logger';
+import { logInfo, logError, logWarn, logDebug } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/logger';
 import notificationService from './services/notification.service';
@@ -84,9 +84,43 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/settings', settingsRoutes);
 
-// 404 handler
+// Common bot/scanner patterns to ignore or log at lower level
+const BOT_SCAN_PATTERNS = [
+  /wp-admin/i,
+  /wp-content/i,
+  /wp-includes/i,
+  /wp-login/i,
+  /wordpress/i,
+  /\.php$/i,
+  /phpmyadmin/i,
+  /admin\.php/i,
+  /setup-config/i,
+  /xmlrpc/i,
+  /\.env$/i,
+  /\.git/i,
+  /\.asp/i,
+  /\.aspx/i,
+  /cgi-bin/i,
+  /shell/i,
+  /eval-stdin/i,
+];
+
+// 404 handler with smart logging
 app.use((req: Request, res: Response) => {
-  logError('Route not found', new Error('404'), { method: req.method, url: req.url });
+  const url = req.url;
+  const isBotScan = BOT_SCAN_PATTERNS.some(pattern => pattern.test(url));
+  
+  if (isBotScan) {
+    // Log bot/scanner traffic at warn level without stack trace
+    logWarn('Bot/scanner request blocked', { method: req.method, url, ip: req.ip });
+  } else if (url.startsWith('/api/')) {
+    // Log missing API routes as warnings (might be client bugs)
+    logWarn('API route not found', { method: req.method, url, ip: req.ip });
+  } else {
+    // Log other 404s at debug level (likely client errors or typos)
+    logDebug('Route not found', { method: req.method, url });
+  }
+  
   res.status(404).json({ error: 'Route not found' });
 });
 
