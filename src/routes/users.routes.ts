@@ -5,16 +5,24 @@ import { uploadLogo } from '../utils/upload';
 
 const router = Router();
 
-// Authentication routes
+// Authentication routes (public)
 router.post('/login', userController.loginUser);
 router.post('/register', uploadLogo.single('logo'), userController.registerUser);
+router.post('/refresh-token', userController.refreshToken);
 
-// Legacy route (for backward compatibility, but should be deprecated)
+// Logout routes
+router.post('/logout', userController.logout);
+router.post('/logout-all', authenticate, userController.logoutAll);
+
+// Legacy route (for backward compatibility, deprecated)
 router.post('/', uploadLogo.single('logo'), userController.createOrGetUser);
 
-// Other routes
-router.get('/:id', userController.getUserById);
+// Protected routes
+router.get('/me', authenticate, userController.getCurrentUser);
 router.put('/', authenticate, uploadLogo.single('logo'), userController.updateUser);
+router.post('/change-password', authenticate, userController.changePassword);
+
+// User lookup (protected)
+router.get('/:id', authenticate, userController.getUserById);
 
 export default router;
-

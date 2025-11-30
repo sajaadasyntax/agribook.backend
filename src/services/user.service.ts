@@ -1,15 +1,43 @@
 import prisma from '../config/database';
-import { NotFoundError, ConflictError, DatabaseError, BadRequestError } from '../utils/errors';
+import { NotFoundError, ConflictError, DatabaseError, BadRequestError, UnauthorizedError } from '../utils/errors';
 import { logInfo, logError } from '../utils/logger';
+import { hashPassword, comparePassword, generateTokenPair, validatePassword, verifyRefreshToken } from '../utils/auth';
 import fileService from './file.service';
 
+// Type for user with extended fields (after schema migration)
+type UserWithExtendedFields = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  phone: string | null;
+  password?: string | null;
+  companyName?: string | null;
+  logoUrl?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export interface AuthResponse {
+  user: any;
+  settings: any;
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+    accessTokenExpiresAt: Date;
+    refreshTokenExpiresAt: Date;
+  };
+}
+
 export class UserService {
-  async loginUser(email?: string, phone?: string) {
+  /**
+   * Login user with email/phone and password
+   */
+  async loginUser(email?: string, phone?: string, password?: string): Promise<AuthResponse> {
     try {
       logInfo('Logging in user', { email, phone });
 
       if (!email && !phone) {
-        throw new NotFoundError('Email or phone is required for login');
+        throw new BadRequestError('Email or phone is required for login');
       }
 
       let user = null;
@@ -23,6 +51,7 @@ export class UserService {
 
       // If not found by email, try phone
       if (!user && phone) {
+        // Note: Phone unique constraint requires Prisma regeneration after migration
         user = await prisma.user.findFirst({
           where: { phone },
         });
@@ -31,6 +60,22 @@ export class UserService {
       if (!user) {
         logError('Login failed: User not found', new Error('User not found'), { email, phone });
         throw new NotFoundError('User not found. Please register first.');
+      }
+
+      // Cast to extended type for password access
+      const userExt = user as unknown as UserWithExtendedFields;
+
+      // Verify password if user has one set
+      if (userExt.password) {
+        if (!password) {
+          throw new BadRequestError('Password is required');
+        }
+        
+        const isValidPassword = await comparePassword(password, userExt.password);
+        if (!isValidPassword) {
+          logError('Login failed: Invalid password', new Error('Invalid password'), { email, phone });
+          throw new UnauthorizedError('Invalid password');
+        }
       }
 
       logInfo('User logged in successfully', { userId: user.id, email: user.email });
@@ -46,16 +91,31 @@ export class UserService {
 
       logInfo('User settings ensured', { userId: user.id });
 
+      // Generate tokens
+      const tokens = generateTokenPair(user.id, user.email || undefined);
+      
+      // Store refresh token in database (after Prisma regeneration)
+      // @ts-expect-error - RefreshToken model available after migration
+      await prisma.refreshToken.create({
+        data: {
+          token: tokens.refreshToken,
+          userId: user.id,
+          expiresAt: tokens.refreshTokenExpiresAt,
+        },
+      });
+
       const userLogoUrl = (user as any).logoUrl;
       return { 
         user: {
           ...user,
+          password: undefined, // Never send password to client
           logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
         },
-        settings 
+        settings,
+        tokens,
       };
     } catch (error) {
-      if (error instanceof NotFoundError) {
+      if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof UnauthorizedError) {
         throw error;
       }
       logError('Error logging in user', error, { email, phone });
@@ -63,12 +123,31 @@ export class UserService {
     }
   }
 
-  async registerUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string, logoFilename?: string) {
+  /**
+   * Register a new user
+   */
+  async registerUser(
+    email?: string, 
+    name?: string, 
+    phone?: string, 
+    password?: string,
+    companyName?: string, 
+    logoUrl?: string, 
+    logoFilename?: string
+  ): Promise<AuthResponse> {
     try {
       logInfo('Registering new user', { email, name, companyName, hasLogoFile: !!logoFilename });
 
       if (!name) {
         throw new BadRequestError('Name is required for registration');
+      }
+
+      // Validate password if provided
+      if (password) {
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.valid) {
+          throw new BadRequestError(passwordValidation.errors.join('. '));
+        }
       }
 
       // If uploading a new logo file, process it and get the URL
@@ -103,12 +182,17 @@ export class UserService {
         }
       }
 
-      // Create new user
+      // Hash password if provided
+      const hashedPassword = password ? await hashPassword(password) : undefined;
+
+      // Create new user (password field available after migration)
       const user = await prisma.user.create({
         data: {
           email: email || undefined,
           name: name,
           phone: phone || undefined,
+          // @ts-expect-error - password field available after migration
+          password: hashedPassword,
           ...(companyName && { companyName }),
           ...(finalLogoUrl && { logoUrl: finalLogoUrl }),
         },
@@ -120,6 +204,7 @@ export class UserService {
       const userLogoUrl = (user as any).logoUrl;
       const userWithLogo = {
         ...user,
+        password: undefined, // Never send password to client
         logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
       } as typeof user;
 
@@ -132,12 +217,26 @@ export class UserService {
 
       logInfo('User settings created', { userId: user.id });
 
+      // Generate tokens
+      const tokens = generateTokenPair(user.id, user.email || undefined);
+      
+      // Store refresh token in database (after Prisma regeneration)
+      // @ts-expect-error - RefreshToken model available after migration
+      await prisma.refreshToken.create({
+        data: {
+          token: tokens.refreshToken,
+          userId: user.id,
+          expiresAt: tokens.refreshTokenExpiresAt,
+        },
+      });
+
       return { 
         user: userWithLogo,
-        settings 
+        settings,
+        tokens,
       };
     } catch (error) {
-      if (error instanceof ConflictError) {
+      if (error instanceof ConflictError || error instanceof BadRequestError) {
         throw error;
       }
       logError('Error registering user', error, { email, name });
@@ -148,6 +247,9 @@ export class UserService {
     }
   }
 
+  /**
+   * Legacy: Create or get user (backward compatibility)
+   */
   async createOrGetUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string, logoFilename?: string) {
     try {
       logInfo('Creating or getting user', { email, name, companyName, hasLogoFile: !!logoFilename });
@@ -169,6 +271,16 @@ export class UserService {
 
         if (user) {
           logInfo('User found by email', { userId: user.id, email });
+        }
+      }
+
+      if (!user && phone) {
+        user = await prisma.user.findFirst({
+          where: { phone },
+        });
+
+        if (user) {
+          logInfo('User found by phone', { userId: user.id, phone });
         }
       }
 
@@ -224,13 +336,28 @@ export class UserService {
 
       logInfo('User settings ensured', { userId: user.id });
 
+      // Generate tokens
+      const tokens = generateTokenPair(user.id, user.email || undefined);
+      
+      // Store refresh token in database (after Prisma regeneration)
+      // @ts-expect-error - RefreshToken model available after migration
+      await prisma.refreshToken.create({
+        data: {
+          token: tokens.refreshToken,
+          userId: user.id,
+          expiresAt: tokens.refreshTokenExpiresAt,
+        },
+      });
+
       const userLogoUrl = (user as any).logoUrl;
       return { 
         user: {
           ...user,
+          password: undefined,
           logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
         },
-        settings 
+        settings,
+        tokens,
       };
     } catch (error) {
       logError('Error creating or getting user', error, { email, name });
@@ -238,6 +365,83 @@ export class UserService {
         throw new ConflictError('User with this email already exists');
       }
       throw new DatabaseError('Failed to create or get user');
+    }
+  }
+
+  /**
+   * Refresh access token using refresh token
+   */
+  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; accessTokenExpiresAt: Date }> {
+    try {
+      // Verify the refresh token
+      const payload = verifyRefreshToken(refreshToken);
+      
+      if (!payload) {
+        throw new UnauthorizedError('Invalid or expired refresh token');
+      }
+
+      // Check if refresh token exists in database and is not expired
+      // @ts-expect-error - RefreshToken model available after migration
+      const storedToken = await prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
+
+      if (!storedToken) {
+        throw new UnauthorizedError('Refresh token not found');
+      }
+
+      if (storedToken.expiresAt < new Date()) {
+        // Clean up expired token
+        // @ts-expect-error - RefreshToken model available after migration
+        await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        throw new UnauthorizedError('Refresh token has expired');
+      }
+
+      // Generate new access token
+      const tokens = generateTokenPair(storedToken.userId, storedToken.user.email || undefined);
+
+      return {
+        accessToken: tokens.accessToken,
+        accessTokenExpiresAt: tokens.accessTokenExpiresAt,
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        throw error;
+      }
+      logError('Error refreshing access token', error);
+      throw new DatabaseError('Failed to refresh access token');
+    }
+  }
+
+  /**
+   * Logout user - revoke refresh token
+   */
+  async logout(refreshToken: string): Promise<void> {
+    try {
+      // @ts-expect-error - RefreshToken model available after migration
+      await prisma.refreshToken.deleteMany({
+        where: { token: refreshToken },
+      });
+      logInfo('User logged out, refresh token revoked');
+    } catch (error) {
+      logError('Error during logout', error);
+      // Don't throw - logout should always succeed from user perspective
+    }
+  }
+
+  /**
+   * Logout from all devices - revoke all refresh tokens for user
+   */
+  async logoutAll(userId: string): Promise<void> {
+    try {
+      // @ts-expect-error - RefreshToken model available after migration
+      await prisma.refreshToken.deleteMany({
+        where: { userId },
+      });
+      logInfo('User logged out from all devices', { userId });
+    } catch (error) {
+      logError('Error during logout all', error, { userId });
     }
   }
 
@@ -257,12 +461,13 @@ export class UserService {
         throw new NotFoundError('User not found');
       }
 
-      // Remove pinHash from settings for security
-      // Return a new object with settings without pinHash rather than mutating
-      const { settings, ...userWithoutSettings } = user;
+      // Remove sensitive data (password field available after migration)
+      // @ts-expect-error - password field available after migration
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { settings, password: _password, ...userWithoutSensitive } = user;
       const userLogoUrl = (user as any).logoUrl;
       const safeUser = {
-        ...userWithoutSettings,
+        ...userWithoutSensitive,
         logoUrl: fileService.getLogoUrl(userLogoUrl) || userLogoUrl,
         settings: settings ? {
           id: settings.id,
@@ -337,6 +542,7 @@ export class UserService {
       const userLogoUrl = (user as any).logoUrl;
       const userWithLogoUrl = {
         ...user,
+        password: undefined,
         logoUrl: fileService.getLogoUrl(userLogoUrl) || userLogoUrl,
       };
 
@@ -347,7 +553,57 @@ export class UserService {
       throw new DatabaseError('Failed to update user');
     }
   }
+
+  /**
+   * Change user password
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new NotFoundError('User not found');
+      }
+
+      // Cast to extended type for password access
+      const userExt = user as unknown as UserWithExtendedFields;
+
+      // If user has existing password, verify it
+      if (userExt.password) {
+        const isValid = await comparePassword(currentPassword, userExt.password);
+        if (!isValid) {
+          throw new UnauthorizedError('Current password is incorrect');
+        }
+      }
+
+      // Validate new password
+      const validation = validatePassword(newPassword);
+      if (!validation.valid) {
+        throw new BadRequestError(validation.errors.join('. '));
+      }
+
+      // Hash and update password
+      const hashedPassword = await hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: userId },
+        // @ts-expect-error - password field available after migration
+        data: { password: hashedPassword },
+      });
+
+      // Revoke all refresh tokens for security
+      await this.logoutAll(userId);
+
+      logInfo('Password changed successfully', { userId });
+    } catch (error) {
+      if (error instanceof NotFoundError || error instanceof UnauthorizedError || error instanceof BadRequestError) {
+        throw error;
+      }
+      logError('Error changing password', error, { userId });
+      throw new DatabaseError('Failed to change password');
+    }
+  }
 }
 
 export default new UserService();
-

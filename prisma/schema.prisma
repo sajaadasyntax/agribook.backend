@@ -14,7 +14,8 @@ model User {
   id            String    @id @default(uuid())
   email         String?   @unique
   name          String?
-  phone         String?
+  phone         String?   @unique
+  password      String?   // Hashed password for authentication
   companyName   String?
   logoUrl       String?
   createdAt     DateTime  @default(now())
@@ -24,8 +25,23 @@ model User {
   alerts        Alert[]
   reminders     Reminder[]
   settings      UserSettings?
+  refreshTokens RefreshToken[]
   
   @@map("users")
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
 }
 
 model Category {
