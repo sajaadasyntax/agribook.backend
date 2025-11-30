@@ -85,8 +85,38 @@ export class SettingsService {
         } else {
           updateData.pinHash = null;
           updateData.pinEnabled = false;
-          logInfo('PIN disabled', { userId });
+          // If PIN is disabled, also disable fingerprint
+          updateData.fingerprintEnabled = false;
+          logInfo('PIN disabled, fingerprint also disabled', { userId });
         }
+      }
+
+      // Validate fingerprint can only be enabled if PIN is enabled
+      // Check this after processing PIN updates but before database update
+      if (updateData.fingerprintEnabled === true) {
+        // Determine if PIN will be enabled after this update
+        let willHavePin: boolean;
+        if (updateData.pinEnabled !== undefined) {
+          willHavePin = updateData.pinEnabled === true;
+        } else if (data.pin !== undefined && data.pin) {
+          // PIN is being set, so it will be enabled
+          willHavePin = true;
+        } else {
+          // Check current settings
+          const currentSettings = await prisma.userSettings.findUnique({
+            where: { userId },
+          });
+          willHavePin = currentSettings?.pinEnabled ?? false;
+        }
+        
+        if (!willHavePin) {
+          throw new BadRequestError('PIN must be enabled before enabling fingerprint authentication');
+        }
+      }
+      
+      // If PIN is being disabled via pinEnabled flag, also disable fingerprint
+      if (updateData.pinEnabled === false) {
+        updateData.fingerprintEnabled = false;
       }
 
       const updated = await prisma.userSettings.update({

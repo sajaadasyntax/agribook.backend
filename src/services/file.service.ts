@@ -55,7 +55,15 @@ export class FileService {
       return true; // Assume exists if it's a URL
     }
     
-    const filePath = path.join(__dirname, '../../uploads/logos', filename);
+    // Extract just the filename if it's a path
+    let actualFilename = filename;
+    if (filename.startsWith('/uploads/logos/')) {
+      actualFilename = filename.replace('/uploads/logos/', '');
+    } else if (filename.startsWith('/uploads/')) {
+      actualFilename = filename.replace('/uploads/', '');
+    }
+    
+    const filePath = path.join(__dirname, '../../uploads/logos', actualFilename);
     return fs.existsSync(filePath);
   }
 }

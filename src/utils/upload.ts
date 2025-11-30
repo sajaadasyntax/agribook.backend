@@ -62,7 +62,12 @@ export const getFileUrl = (filename: string | null | undefined): string | null =
     return filename;
   }
   
-  // Return relative URL that will be served by static middleware
+  // If it's already a relative path (starts with /uploads), return as is
+  if (filename.startsWith('/uploads/')) {
+    return filename;
+  }
+  
+  // Otherwise, it's just a filename - return relative URL that will be served by static middleware
   return `/uploads/logos/${filename}`;
 };
 
@@ -75,14 +80,22 @@ export const deleteFile = (filename: string | null | undefined): void => {
     return;
   }
   
-  const filePath = path.join(uploadsDir, filename);
+  // Extract just the filename if it's a path
+  let actualFilename = filename;
+  if (filename.startsWith('/uploads/logos/')) {
+    actualFilename = filename.replace('/uploads/logos/', '');
+  } else if (filename.startsWith('/uploads/')) {
+    actualFilename = filename.replace('/uploads/', '');
+  }
+  
+  const filePath = path.join(uploadsDir, actualFilename);
   
   fs.unlink(filePath, (err) => {
     if (err) {
       // File might not exist, that's okay
-      logError('Error deleting file', err, { filename });
+      logError('Error deleting file', err, { filename, actualFilename });
     } else {
-      logInfo('File deleted', { filename });
+      logInfo('File deleted', { filename, actualFilename });
     }
   });
 };

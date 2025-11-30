@@ -5,6 +5,40 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { logInfo } from '../utils/logger';
 
 export class UserController {
+  loginUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { email, phone } = req.body;
+    
+    logInfo('Login user request', { email, phone });
+
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Email or phone is required for login' });
+    }
+
+    const result = await userService.loginUser(email, phone);
+
+    res.status(200).json(result);
+  });
+
+  registerUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { email, name, phone, companyName } = req.body;
+    const logoFile = (req as any).file; // File from multer
+    
+    logInfo('Register user request', { 
+      email, 
+      name, 
+      companyName,
+      hasFile: !!logoFile,
+      fileName: logoFile?.filename 
+    });
+
+    // If logo file was uploaded, use the filename; otherwise logoUrl is undefined
+    const logoFilename = logoFile?.filename;
+
+    const result = await userService.registerUser(email, name, phone, companyName, undefined, logoFilename);
+
+    res.status(201).json(result);
+  });
+
   createOrGetUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { email, name, phone, companyName } = req.body;
     const logoFile = (req as any).file; // File from multer

@@ -1,9 +1,153 @@
 import prisma from '../config/database';
-import { NotFoundError, ConflictError, DatabaseError } from '../utils/errors';
+import { NotFoundError, ConflictError, DatabaseError, BadRequestError } from '../utils/errors';
 import { logInfo, logError } from '../utils/logger';
 import fileService from './file.service';
 
 export class UserService {
+  async loginUser(email?: string, phone?: string) {
+    try {
+      logInfo('Logging in user', { email, phone });
+
+      if (!email && !phone) {
+        throw new NotFoundError('Email or phone is required for login');
+      }
+
+      let user = null;
+
+      // Try to find user by email first
+      if (email) {
+        user = await prisma.user.findUnique({
+          where: { email },
+        });
+      }
+
+      // If not found by email, try phone
+      if (!user && phone) {
+        user = await prisma.user.findFirst({
+          where: { phone },
+        });
+      }
+
+      if (!user) {
+        logError('Login failed: User not found', new Error('User not found'), { email, phone });
+        throw new NotFoundError('User not found. Please register first.');
+      }
+
+      logInfo('User logged in successfully', { userId: user.id, email: user.email });
+
+      // Ensure default settings exist
+      const settings = await prisma.userSettings.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: {
+          userId: user.id,
+        },
+      });
+
+      logInfo('User settings ensured', { userId: user.id });
+
+      const userLogoUrl = (user as any).logoUrl;
+      return { 
+        user: {
+          ...user,
+          logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
+        },
+        settings 
+      };
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        throw error;
+      }
+      logError('Error logging in user', error, { email, phone });
+      throw new DatabaseError('Failed to login user');
+    }
+  }
+
+  async registerUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string, logoFilename?: string) {
+    try {
+      logInfo('Registering new user', { email, name, companyName, hasLogoFile: !!logoFilename });
+
+      if (!name) {
+        throw new BadRequestError('Name is required for registration');
+      }
+
+      // If uploading a new logo file, process it and get the URL
+      let finalLogoUrl: string | null | undefined = logoUrl;
+      if (logoFilename) {
+        await fileService.processLogoFile(logoFilename);
+        const fileUrl = fileService.getLogoUrl(logoFilename);
+        finalLogoUrl = fileUrl;
+      }
+
+      // Check if user already exists by email
+      if (email) {
+        const existingUser = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (existingUser) {
+          logError('Registration failed: User already exists', new Error('User already exists'), { email });
+          throw new ConflictError('User with this email already exists. Please login instead.');
+        }
+      }
+
+      // Check if user already exists by phone
+      if (phone) {
+        const existingUser = await prisma.user.findFirst({
+          where: { phone },
+        });
+
+        if (existingUser) {
+          logError('Registration failed: User already exists', new Error('User already exists'), { phone });
+          throw new ConflictError('User with this phone number already exists. Please login instead.');
+        }
+      }
+
+      // Create new user
+      const user = await prisma.user.create({
+        data: {
+          email: email || undefined,
+          name: name,
+          phone: phone || undefined,
+          ...(companyName && { companyName }),
+          ...(finalLogoUrl && { logoUrl: finalLogoUrl }),
+        },
+      });
+      
+      logInfo('User registered successfully', { userId: user.id, email: user.email });
+      
+      // Return user with full logo URL if it exists
+      const userLogoUrl = (user as any).logoUrl;
+      const userWithLogo = {
+        ...user,
+        logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
+      } as typeof user;
+
+      // Create default settings for new user
+      const settings = await prisma.userSettings.create({
+        data: {
+          userId: user.id,
+        },
+      });
+
+      logInfo('User settings created', { userId: user.id });
+
+      return { 
+        user: userWithLogo,
+        settings 
+      };
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        throw error;
+      }
+      logError('Error registering user', error, { email, name });
+      if (error instanceof Error && error.message.includes('Unique constraint')) {
+        throw new ConflictError('User with this email or phone already exists. Please login instead.');
+      }
+      throw new DatabaseError('Failed to register user');
+    }
+  }
+
   async createOrGetUser(email?: string, name?: string, phone?: string, companyName?: string, logoUrl?: string, logoFilename?: string) {
     try {
       logInfo('Creating or getting user', { email, name, companyName, hasLogoFile: !!logoFilename });
