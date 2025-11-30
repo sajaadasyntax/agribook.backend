@@ -1,83 +1,79 @@
-# Reminder System Migration Guide
+# Database Migration Guide
 
-This guide explains how to apply the database migration for the new reminder system features.
+## Problem
+Prisma `migrate dev` requires a shadow database, which your production database user doesn't have permission to create.
 
-## Changes Made
+## Solution Options
 
-The Reminder model has been updated to include:
-- `reminderType` (enum: GENERAL, TRANSACTION, THRESHOLD)
-- `categoryId` (optional foreign key to Category)
-- `thresholdAmount` (optional Decimal)
-- `transactionType` (optional enum: INCOME, EXPENSE)
-- `transactionAmount` (optional Decimal)
+### Option 1: Use `prisma migrate deploy` (Recommended for Production)
 
-## Migration Steps
+This command doesn't require a shadow database and is designed for production environments.
 
-### 1. Generate Prisma Client
+**Steps:**
 
+1. **On your local machine (with dev database access):**
 ```bash
 cd backend
-npm run prisma:generate
+npx prisma migrate dev --name add_auth_and_phone_unique --create-only
 ```
 
-### 2. Create and Apply Migration
+This creates the migration file without applying it.
 
+2. **Copy the migration file to your server:**
+   - Copy the generated migration file from `prisma/migrations/` to your server
+
+3. **On your production server:**
 ```bash
-# Create a new migration
-npx prisma migrate dev --name add_reminder_fields
-
-# Or if you want to apply to production
+cd /var/www/agribooks/agribook.backend
+npx prisma generate
 npx prisma migrate deploy
 ```
 
-### 3. Verify Migration
+### Option 2: Use `prisma db push` (Quick Workaround)
 
-After migration, verify the changes:
+This pushes schema changes directly without creating migration files. **Use with caution in production.**
 
 ```bash
-# Open Prisma Studio to inspect the database
-npm run prisma:studio
+cd /var/www/agribooks/agribook.backend
+npx prisma generate
+npx prisma db push
 ```
 
-## New Features
+**Warning:** `db push` doesn't create migration history and may cause issues if you need to rollback.
 
-### Threshold Reminders
-- Automatically trigger when an expense transaction exceeds the threshold amount for a specific category
-- Integrated into transaction creation and update flows
+### Option 3: Grant Database Permissions
 
-### Transaction Reminders
-- Trigger when the due date arrives
-- Checked hourly via scheduled job
+If you have superuser access, grant the database user permission to create databases:
 
-### General Reminders
-- Trigger on the due date
-- Checked hourly via scheduled job
+```sql
+-- Connect as postgres superuser
+ALTER USER your_db_user CREATEDB;
+```
 
-## Notification Service
+Then you can use `prisma migrate dev` normally.
 
-The notification service (`src/services/notification.service.ts`) automatically:
-- Checks threshold reminders when expenses are created/updated
-- Checks transaction and general reminders every hour
-- Creates alerts for triggered reminders
+### Option 4: Configure Shadow Database URL
 
-## Testing
+You can specify a separate shadow database in your `.env` file:
 
-1. Create a threshold reminder:
-   - Set reminder type to "THRESHOLD"
-   - Select a category
-   - Set a threshold amount
-   - Create an expense transaction that exceeds the threshold
-   - Check alerts - you should see a warning alert
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/agribooks"
+SHADOW_DATABASE_URL="postgresql://user:password@localhost:5432/agribooks_shadow"
+```
 
-2. Create a transaction reminder:
-   - Set reminder type to "TRANSACTION"
-   - Set a due date (today or in the future)
-   - Wait for the scheduled check (or trigger manually)
-   - Check alerts - you should see an info alert
+Then create the shadow database manually:
+```sql
+CREATE DATABASE agribooks_shadow;
+```
 
-3. Create a general reminder:
-   - Set reminder type to "GENERAL"
-   - Set a due date
-   - Wait for the scheduled check
-   - Check alerts - you should see an info alert
+---
 
+## Recommended Approach for Your Situation
+
+Since you're on a production server, I recommend **Option 1**:
+
+1. Create the migration locally
+2. Copy it to the server
+3. Run `prisma migrate deploy` on the server
+
+This is the safest approach for production environments.
