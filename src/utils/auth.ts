@@ -72,7 +72,7 @@ export const generateRefreshToken = (userId: string, email?: string): string => 
   };
   
   const options: SignOptions = {
-    expiresIn: JWT_REFRESH_EXPIRES_IN,
+    expiresIn: JWT_REFRESH_EXPIRES_IN as string | number,
   };
   
   return jwt.sign(payload, JWT_REFRESH_SECRET, options);
