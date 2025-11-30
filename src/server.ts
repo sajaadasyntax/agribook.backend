@@ -43,8 +43,15 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files with caching headers
+// In production, consider using UPLOADS_DIR env var for persistent storage
+const uploadsPath = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsPath, {
+  maxAge: '1d', // Cache for 1 day
+  etag: true,
+  lastModified: true,
+  immutable: false, // Files can be updated
+}));
 
 // Health check endpoint (with database connectivity check)
 app.get('/api/health', async (_req: Request, res: Response) => {

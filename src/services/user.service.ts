@@ -152,8 +152,9 @@ export class UserService {
       // If uploading a new logo file, process it and get the URL
       let finalLogoUrl: string | null | undefined = logoUrl;
       if (logoFilename) {
-        await fileService.processLogoFile(logoFilename);
-        const fileUrl = fileService.getLogoUrl(logoFilename);
+        // processLogoFile returns the optimized filename (always .jpg)
+        const optimizedFilename = await fileService.processLogoFile(logoFilename);
+        const fileUrl = fileService.getLogoUrl(optimizedFilename);
         finalLogoUrl = fileUrl;
       }
 
@@ -254,8 +255,9 @@ export class UserService {
       // If uploading a new logo file, process it and get the URL
       let finalLogoUrl: string | null | undefined = logoUrl;
       if (logoFilename) {
-        await fileService.processLogoFile(logoFilename);
-        const fileUrl = fileService.getLogoUrl(logoFilename);
+        // processLogoFile returns the optimized filename (always .jpg)
+        const optimizedFilename = await fileService.processLogoFile(logoFilename);
+        const fileUrl = fileService.getLogoUrl(optimizedFilename);
         finalLogoUrl = fileUrl;
       }
 
@@ -501,8 +503,9 @@ export class UserService {
       // If uploading a new logo file, process it and get the URL
       let logoUrl: string | null | undefined = data.logoUrl;
       if (logoFilename) {
-        await fileService.processLogoFile(logoFilename);
-        const fileUrl = fileService.getLogoUrl(logoFilename);
+        // processLogoFile returns the optimized filename (always .jpg)
+        const optimizedFilename = await fileService.processLogoFile(logoFilename);
+        const fileUrl = fileService.getLogoUrl(optimizedFilename);
         logoUrl = fileUrl; // fileUrl is string | null
         
         // Delete old logo file if it exists and is different
