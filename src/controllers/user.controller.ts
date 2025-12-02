@@ -6,15 +6,15 @@ import { logInfo } from '../utils/logger';
 
 export class UserController {
   loginUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { email, phone, password } = req.body;
+    const { phone, password } = req.body;
     
-    logInfo('Login user request', { email, phone });
+    logInfo('Login user request', { phone });
 
-    if (!email && !phone) {
-      return res.status(400).json({ message: 'Email or phone is required for login' });
+    if (!phone) {
+      return res.status(400).json({ message: 'Phone number is required for login' });
     }
 
-    const result = await userService.loginUser(email, phone, password);
+    const result = await userService.loginUser(undefined, phone, password);
 
     return res.status(200).json(result);
   });

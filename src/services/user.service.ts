@@ -36,29 +36,18 @@ export class UserService {
     try {
       logInfo('Logging in user', { email, phone });
 
-      if (!email && !phone) {
-        throw new BadRequestError('Email or phone is required for login');
+      // Login requires phone (email is optional/not used for login)
+      if (!phone) {
+        throw new BadRequestError('Phone number is required for login');
       }
 
-      let user = null;
-
-      // Try to find user by email first
-      if (email) {
-        user = await prisma.user.findUnique({
-          where: { email },
-        });
-      }
-
-      // If not found by email, try phone
-      if (!user && phone) {
-        // Note: Phone unique constraint requires Prisma regeneration after migration
-        user = await prisma.user.findFirst({
-          where: { phone },
-        });
-      }
+      // Find user by phone
+      const user = await prisma.user.findFirst({
+        where: { phone },
+      });
 
       if (!user) {
-        logError('Login failed: User not found', new Error('User not found'), { email, phone });
+        logError('Login failed: User not found', new Error('User not found'), { phone });
         throw new NotFoundError('User not found. Please register first.');
       }
 
