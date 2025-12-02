@@ -1,0 +1,67 @@
+[1mdiff --git a/src/controllers/user.controller.ts b/src/controllers/user.controller.ts[m
+[1mindex 3172de4..618787c 100644[m
+[1m--- a/src/controllers/user.controller.ts[m
+[1m+++ b/src/controllers/user.controller.ts[m
+[36m@@ -6,15 +6,15 @@[m [mimport { logInfo } from '../utils/logger';[m
+ [m
+ export class UserController {[m
+   loginUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {[m
+[31m-    const { email, phone, password } = req.body;[m
+[32m+[m[32m    const { phone, password } = req.body;[m
+     [m
+[31m-    logInfo('Login user request', { email, phone });[m
+[32m+[m[32m    logInfo('Login user request', { phone });[m
+ [m
+[31m-    if (!email && !phone) {[m
+[31m-      return res.status(400).json({ message: 'Email or phone is required for login' });[m
+[32m+[m[32m    if (!phone) {[m
+[32m+[m[32m      return res.status(400).json({ message: 'Phone number is required for login' });[m
+     }[m
+ [m
+[31m-    const result = await userService.loginUser(email, phone, password);[m
+[32m+[m[32m    const result = await userService.loginUser(undefined, phone, password);[m
+ [m
+     return res.status(200).json(result);[m
+   });[m
+[1mdiff --git a/src/services/user.service.ts b/src/services/user.service.ts[m
+[1mindex a8dd1d3..9583cc9 100644[m
+[1m--- a/src/services/user.service.ts[m
+[1m+++ b/src/services/user.service.ts[m
+[36m@@ -36,29 +36,18 @@[m [mexport class UserService {[m
+     try {[m
+       logInfo('Logging in user', { email, phone });[m
+ [m
+[31m-      if (!email && !phone) {[m
+[31m-        throw new BadRequestError('Email or phone is required for login');[m
+[32m+[m[32m      // Login requires phone (email is optional/not used for login)[m
+[32m+[m[32m      if (!phone) {[m
+[32m+[m[32m        throw new BadRequestError('Phone number is required for login');[m
+       }[m
+ [m
+[31m-      let user = null;[m
+[31m-[m
+[31m-      // Try to find user by email first[m
+[31m-      if (email) {[m
+[31m-        user = await prisma.user.findUnique({[m
+[31m-          where: { email },[m
+[31m-        });[m
+[31m-      }[m
+[31m-[m
+[31m-      // If not found by email, try phone[m
+[31m-      if (!user && phone) {[m
+[31m-        // Note: Phone unique constraint requires Prisma regeneration after migration[m
+[31m-        user = await prisma.user.findFirst({[m
+[31m-          where: { phone },[m
+[31m-        });[m
+[31m-      }[m
+[32m+[m[32m      // Find user by phone[m
+[32m+[m[32m      const user = await prisma.user.findFirst({[m
+[32m+[m[32m        where: { phone },[m
+[32m+[m[32m      });[m
+ [m
+       if (!user) {[m
+[31m-        logError('Login failed: User not found', new Error('User not found'), { email, phone });[m
+[32m+[m[32m        logError('Login failed: User not found', new Error('User not found'), { phone });[m
+         throw new NotFoundError('User not found. Please register first.');[m
+       }[m
+ [m
