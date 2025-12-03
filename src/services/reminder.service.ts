@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { NotFoundError, DatabaseError } from '../utils/errors';
+import { NotFoundError, DatabaseError, BadRequestError } from '../utils/errors';
 import { logInfo, logError } from '../utils/logger';
 import { CreateReminderDto, UpdateReminderDto } from '../types';
 import { Reminder } from '@prisma/client';
@@ -82,13 +82,32 @@ export class ReminderService {
     try {
       logInfo('Creating reminder', { userId, title: data.title, dueDate: data.dueDate });
 
+      // Validate and normalize reminderType
+      const validReminderTypes = ['GENERAL', 'TRANSACTION', 'THRESHOLD'];
+      let reminderType = data.reminderType || 'GENERAL';
+      
+      // Map legacy values for backward compatibility
+      if (reminderType === 'BUDGET_ALERT') {
+        reminderType = 'THRESHOLD';
+        logInfo('Mapped legacy reminderType BUDGET_ALERT to THRESHOLD', { userId });
+      }
+      
+      // Validate reminderType
+      if (!validReminderTypes.includes(reminderType)) {
+        logError('Invalid reminderType', new Error(`Invalid reminderType: ${reminderType}`), {
+          userId,
+          reminderType: data.reminderType,
+        });
+        throw new BadRequestError(`Invalid reminderType: ${reminderType}. Valid values are: ${validReminderTypes.join(', ')}`);
+      }
+
       const reminder = await prisma.reminder.create({
         data: {
           title: data.title,
           description: data.description,
           dueDate: new Date(data.dueDate),
           userId,
-          reminderType: data.reminderType || 'GENERAL',
+          reminderType: reminderType as 'GENERAL' | 'TRANSACTION' | 'THRESHOLD',
           categoryId: data.categoryId,
           thresholdAmount: data.thresholdAmount,
           transactionType: data.transactionType,
@@ -135,7 +154,31 @@ export class ReminderService {
       if (data.description !== undefined) updateData.description = data.description;
       if (data.dueDate !== undefined) updateData.dueDate = new Date(data.dueDate);
       if (data.completed !== undefined) updateData.completed = data.completed;
-      if (data.reminderType !== undefined) updateData.reminderType = data.reminderType;
+      
+      // Validate and normalize reminderType if provided
+      if (data.reminderType !== undefined) {
+        const validReminderTypes = ['GENERAL', 'TRANSACTION', 'THRESHOLD'];
+        let reminderType = data.reminderType;
+        
+        // Map legacy values for backward compatibility
+        if (reminderType === 'BUDGET_ALERT') {
+          reminderType = 'THRESHOLD';
+          logInfo('Mapped legacy reminderType BUDGET_ALERT to THRESHOLD', { reminderId, userId });
+        }
+        
+        // Validate reminderType
+        if (!validReminderTypes.includes(reminderType)) {
+          logError('Invalid reminderType', new Error(`Invalid reminderType: ${reminderType}`), {
+            reminderId,
+            userId,
+            reminderType: data.reminderType,
+          });
+          throw new BadRequestError(`Invalid reminderType: ${reminderType}. Valid values are: ${validReminderTypes.join(', ')}`);
+        }
+        
+        updateData.reminderType = reminderType as 'GENERAL' | 'TRANSACTION' | 'THRESHOLD';
+      }
+      
       if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
       if (data.thresholdAmount !== undefined) updateData.thresholdAmount = data.thresholdAmount;
       if (data.transactionType !== undefined) updateData.transactionType = data.transactionType;
