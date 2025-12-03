@@ -84,7 +84,8 @@ export class ReminderService {
 
       // Validate and normalize reminderType
       const validReminderTypes = ['GENERAL', 'TRANSACTION', 'THRESHOLD'];
-      let reminderType = data.reminderType || 'GENERAL';
+      // Cast to string to handle legacy values that aren't in the type definition
+      let reminderType: string = (data.reminderType as string) || 'GENERAL';
       
       // Map legacy values for backward compatibility
       if (reminderType === 'BUDGET_ALERT') {
@@ -158,7 +159,8 @@ export class ReminderService {
       // Validate and normalize reminderType if provided
       if (data.reminderType !== undefined) {
         const validReminderTypes = ['GENERAL', 'TRANSACTION', 'THRESHOLD'];
-        let reminderType = data.reminderType;
+        // Cast to string to handle legacy values that aren't in the type definition
+        let reminderType: string = data.reminderType as string;
         
         // Map legacy values for backward compatibility
         if (reminderType === 'BUDGET_ALERT') {
