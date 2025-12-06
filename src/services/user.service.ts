@@ -3,6 +3,7 @@ import { NotFoundError, ConflictError, DatabaseError, BadRequestError, Unauthori
 import { logInfo, logError } from '../utils/logger';
 import { hashPassword, comparePassword, generateTokenPair, validatePassword, verifyRefreshToken } from '../utils/auth';
 import fileService from './file.service';
+import { CategoryType } from '@prisma/client';
 
 // Type for user with extended fields (after schema migration)
 type UserWithExtendedFields = {
@@ -29,6 +30,58 @@ export interface AuthResponse {
 }
 
 export class UserService {
+  /**
+   * Seed default categories for a new user
+   */
+  private async seedDefaultCategories(userId: string): Promise<void> {
+    try {
+      logInfo('Seeding default categories for new user', { userId });
+
+      const defaultCategories = [
+        // Income categories
+        { name: 'بيع منتج', type: CategoryType.INCOME },
+        { name: 'بيع خدمة', type: CategoryType.INCOME },
+        { name: 'بيع أصل', type: CategoryType.INCOME },
+        { name: 'منحه ماليه', type: CategoryType.INCOME },
+        { name: 'دين مالي', type: CategoryType.INCOME },
+        // Expense categories
+        { name: 'شراء مدخلات', type: CategoryType.EXPENSE },
+        { name: 'وقود', type: CategoryType.EXPENSE },
+        { name: 'مرتبات', type: CategoryType.EXPENSE },
+        { name: 'صيانه', type: CategoryType.EXPENSE },
+        { name: 'إيجار', type: CategoryType.EXPENSE },
+        { name: 'ترحيل', type: CategoryType.EXPENSE },
+        { name: 'خدمات (كهرباء او مياه)', type: CategoryType.EXPENSE },
+        { name: 'شراء معدات', type: CategoryType.EXPENSE },
+      ];
+
+      // Create categories using createMany for better performance
+      // Note: createMany doesn't support skipDuplicates in all Prisma versions,
+      // so we'll use individual creates with error handling
+      for (const category of defaultCategories) {
+        try {
+          await prisma.category.create({
+            data: {
+              name: category.name,
+              type: category.type,
+              userId: userId,
+            },
+          });
+        } catch (error: any) {
+          // Ignore unique constraint errors (category already exists)
+          if (!error?.message?.includes('Unique constraint')) {
+            logError('Error creating default category', error, { userId, category });
+          }
+        }
+      }
+
+      logInfo('Default categories seeded successfully', { userId, count: defaultCategories.length });
+    } catch (error) {
+      logError('Error seeding default categories', error, { userId });
+      // Don't throw - category seeding failure shouldn't prevent user creation
+    }
+  }
+
   /**
    * Login user with email/phone and password
    */
@@ -205,6 +258,9 @@ export class UserService {
 
       logInfo('User settings created', { userId: user.id });
 
+      // Seed default categories for new user
+      await this.seedDefaultCategories(user.id);
+
       // Generate tokens
       const tokens = generateTokenPair(user.id, user.email || undefined);
       
@@ -291,6 +347,9 @@ export class UserService {
           ...user,
           logoUrl: userLogoUrl ? (fileService.getLogoUrl(userLogoUrl) || userLogoUrl) : userLogoUrl,
         } as typeof user;
+
+        // Seed default categories for new user
+        await this.seedDefaultCategories(user.id);
       } else {
         // Update existing user with company data if provided
         if (companyName || finalLogoUrl) {
