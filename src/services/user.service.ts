@@ -62,13 +62,42 @@ export class UserService {
             name: category.name,
             type: category.type,
             userId: userId,
-          })),
+          } as { name: string; type: CategoryType; userId: string })),
           skipDuplicates: true, // Skip if category already exists
         });
-        logInfo('Default categories seeded with createMany', { userId, count: result.count });
+        logInfo('Default categories seeded with createMany', { userId, count: result.count, total: defaultCategories.length });
+        
+        // Verify categories were created (createMany doesn't throw if skipDuplicates is true and all are duplicates)
+        if (result.count === 0) {
+          logInfo('No categories created (may already exist), verifying with individual creates', { userId });
+          // Try individual creates to ensure categories exist
+          let successCount = 0;
+          for (const category of defaultCategories) {
+            try {
+              await prisma.category.create({
+                data: {
+                  name: category.name,
+                  type: category.type,
+                  userId: userId,
+                } as { name: string; type: CategoryType; userId: string },
+              });
+              successCount++;
+            } catch (error: unknown) {
+              const prismaError = error as { code?: string; message?: string };
+              // Ignore unique constraint errors (category already exists)
+              if (prismaError?.code === 'P2002' || prismaError?.message?.includes('Unique constraint')) {
+                // Category already exists, that's fine
+                successCount++;
+              } else {
+                logError('Error creating default category', error as Error, { userId, category });
+              }
+            }
+          }
+          logInfo('Default categories verified/created individually', { userId, count: successCount });
+        }
       } catch (createManyError) {
         // Fallback to individual creates if createMany fails
-        logInfo('createMany failed, falling back to individual creates', { userId, error: createManyError });
+        logError('createMany failed, falling back to individual creates', createManyError as Error, { userId });
         let successCount = 0;
         for (const category of defaultCategories) {
           try {
@@ -77,18 +106,24 @@ export class UserService {
                 name: category.name,
                 type: category.type,
                 userId: userId,
-              },
+              } as { name: string; type: CategoryType; userId: string },
             });
             successCount++;
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const prismaError = error as { code?: string; message?: string };
             // Ignore unique constraint errors (category already exists)
-            if (!error?.message?.includes('Unique constraint') && !error?.code?.includes('P2002')) {
-              logError('Error creating default category', error, { userId, category });
+            if (prismaError?.code === 'P2002' || prismaError?.message?.includes('Unique constraint')) {
+              // Category already exists, that's fine
+              successCount++;
+            } else {
+              logError('Error creating default category', error as Error, { userId, category });
             }
           }
         }
-        logInfo('Default categories seeded with individual creates', { userId, count: successCount });
+        logInfo('Default categories seeded with individual creates', { userId, count: successCount, total: defaultCategories.length });
       }
+      
+      logInfo('Default categories seeding completed', { userId, expectedCount: defaultCategories.length });
     } catch (error) {
       logError('Error seeding default categories', error, { userId });
       // Don't throw - category seeding failure shouldn't prevent user creation
