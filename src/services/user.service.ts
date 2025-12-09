@@ -55,27 +55,40 @@ export class UserService {
         { name: 'شراء معدات', type: CategoryType.EXPENSE },
       ];
 
-      // Create categories using createMany for better performance
-      // Note: createMany doesn't support skipDuplicates in all Prisma versions,
-      // so we'll use individual creates with error handling
-      for (const category of defaultCategories) {
-        try {
-          await prisma.category.create({
-            data: {
-              name: category.name,
-              type: category.type,
-              userId: userId,
-            },
-          });
-        } catch (error: any) {
-          // Ignore unique constraint errors (category already exists)
-          if (!error?.message?.includes('Unique constraint')) {
-            logError('Error creating default category', error, { userId, category });
+      // Use createMany for better performance with skipDuplicates
+      try {
+        const result = await prisma.category.createMany({
+          data: defaultCategories.map(category => ({
+            name: category.name,
+            type: category.type,
+            userId: userId,
+          })),
+          skipDuplicates: true, // Skip if category already exists
+        });
+        logInfo('Default categories seeded with createMany', { userId, count: result.count });
+      } catch (createManyError) {
+        // Fallback to individual creates if createMany fails
+        logInfo('createMany failed, falling back to individual creates', { userId, error: createManyError });
+        let successCount = 0;
+        for (const category of defaultCategories) {
+          try {
+            await prisma.category.create({
+              data: {
+                name: category.name,
+                type: category.type,
+                userId: userId,
+              },
+            });
+            successCount++;
+          } catch (error: any) {
+            // Ignore unique constraint errors (category already exists)
+            if (!error?.message?.includes('Unique constraint') && !error?.code?.includes('P2002')) {
+              logError('Error creating default category', error, { userId, category });
+            }
           }
         }
+        logInfo('Default categories seeded with individual creates', { userId, count: successCount });
       }
-
-      logInfo('Default categories seeded successfully', { userId, count: defaultCategories.length });
     } catch (error) {
       logError('Error seeding default categories', error, { userId });
       // Don't throw - category seeding failure shouldn't prevent user creation
@@ -179,8 +192,16 @@ export class UserService {
     try {
       logInfo('Registering new user', { email, name, companyName, hasLogoFile: !!logoFilename });
 
-      if (!name) {
-        throw new BadRequestError('Name is required for registration');
+      if (!name || name.trim() === '') {
+        throw new BadRequestError('Name (username) is required for registration');
+      }
+
+      if (!companyName || companyName.trim() === '') {
+        throw new BadRequestError('Company name is required for registration');
+      }
+
+      if (!phone || phone.trim() === '') {
+        throw new BadRequestError('Mobile number is required for registration');
       }
 
       // Validate password if provided
