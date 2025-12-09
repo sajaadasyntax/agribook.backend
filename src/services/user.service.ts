@@ -3,7 +3,6 @@ import { NotFoundError, ConflictError, DatabaseError, BadRequestError, Unauthori
 import { logInfo, logError } from '../utils/logger';
 import { hashPassword, comparePassword, generateTokenPair, validatePassword, verifyRefreshToken } from '../utils/auth';
 import fileService from './file.service';
-import { CategoryType } from '@prisma/client';
 
 // Type for user with extended fields (after schema migration)
 type UserWithExtendedFields = {
@@ -39,93 +38,77 @@ export class UserService {
 
       const defaultCategories = [
         // Income categories
-        { name: 'بيع منتج', type: CategoryType.INCOME },
-        { name: 'بيع خدمة', type: CategoryType.INCOME },
-        { name: 'بيع أصل', type: CategoryType.INCOME },
-        { name: 'منحه ماليه', type: CategoryType.INCOME },
-        { name: 'دين مالي', type: CategoryType.INCOME },
+        { name: 'بيع منتج', type: 'INCOME' as const },
+        { name: 'بيع خدمة', type: 'INCOME' as const },
+        { name: 'بيع أصل', type: 'INCOME' as const },
+        { name: 'منحه ماليه', type: 'INCOME' as const },
+        { name: 'دين مالي', type: 'INCOME' as const },
         // Expense categories
-        { name: 'شراء مدخلات', type: CategoryType.EXPENSE },
-        { name: 'وقود', type: CategoryType.EXPENSE },
-        { name: 'مرتبات', type: CategoryType.EXPENSE },
-        { name: 'صيانه', type: CategoryType.EXPENSE },
-        { name: 'إيجار', type: CategoryType.EXPENSE },
-        { name: 'ترحيل', type: CategoryType.EXPENSE },
-        { name: 'خدمات (كهرباء او مياه)', type: CategoryType.EXPENSE },
-        { name: 'شراء معدات', type: CategoryType.EXPENSE },
+        { name: 'شراء مدخلات', type: 'EXPENSE' as const },
+        { name: 'وقود', type: 'EXPENSE' as const },
+        { name: 'مرتبات', type: 'EXPENSE' as const },
+        { name: 'صيانه', type: 'EXPENSE' as const },
+        { name: 'إيجار', type: 'EXPENSE' as const },
+        { name: 'ترحيل', type: 'EXPENSE' as const },
+        { name: 'خدمات (كهرباء او مياه)', type: 'EXPENSE' as const },
+        { name: 'شراء معدات', type: 'EXPENSE' as const },
       ];
 
-      // Use createMany for better performance with skipDuplicates
-      try {
-        const result = await prisma.category.createMany({
-          data: defaultCategories.map(category => ({
-            name: category.name,
-            type: category.type,
-            userId: userId,
-          } as { name: string; type: CategoryType; userId: string })),
-          skipDuplicates: true, // Skip if category already exists
-        });
-        logInfo('Default categories seeded with createMany', { userId, count: result.count, total: defaultCategories.length });
-        
-        // Verify categories were created (createMany doesn't throw if skipDuplicates is true and all are duplicates)
-        if (result.count === 0) {
-          logInfo('No categories created (may already exist), verifying with individual creates', { userId });
-          // Try individual creates to ensure categories exist
-          let successCount = 0;
-          for (const category of defaultCategories) {
-            try {
-              await prisma.category.create({
-                data: {
-                  name: category.name,
-                  type: category.type,
-                  userId: userId,
-                } as { name: string; type: CategoryType; userId: string },
-              });
-              successCount++;
-            } catch (error: unknown) {
-              const prismaError = error as { code?: string; message?: string };
-              // Ignore unique constraint errors (category already exists)
-              if (prismaError?.code === 'P2002' || prismaError?.message?.includes('Unique constraint')) {
-                // Category already exists, that's fine
-                successCount++;
-              } else {
-                logError('Error creating default category', error as Error, { userId, category });
+      let createdCount = 0;
+      let existingCount = 0;
+      const errors: string[] = [];
+
+      // Create categories one by one using the same pattern as CategoryService
+      for (const category of defaultCategories) {
+        try {
+          // Check if category already exists
+          const existing = await prisma.category.findFirst({
+            where: {
+              userId: userId,
+              name: category.name,
+              type: category.type,
+            },
+          });
+
+          if (existing) {
+            existingCount++;
+            continue;
+          }
+
+          // Create the category using the relation connect pattern
+          await prisma.category.create({
+            data: {
+              name: category.name,
+              type: category.type,
+              user: {
+                connect: { id: userId }
               }
-            }
-          }
-          logInfo('Default categories verified/created individually', { userId, count: successCount });
+            },
+          });
+          createdCount++;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Failed to create ${category.name}: ${errorMsg}`);
+          logError('Error creating default category', error as Error, { userId, categoryName: category.name, categoryType: category.type });
         }
-      } catch (createManyError) {
-        // Fallback to individual creates if createMany fails
-        logError('createMany failed, falling back to individual creates', createManyError as Error, { userId });
-        let successCount = 0;
-        for (const category of defaultCategories) {
-          try {
-            await prisma.category.create({
-              data: {
-                name: category.name,
-                type: category.type,
-                userId: userId,
-              } as { name: string; type: CategoryType; userId: string },
-            });
-            successCount++;
-          } catch (error: unknown) {
-            const prismaError = error as { code?: string; message?: string };
-            // Ignore unique constraint errors (category already exists)
-            if (prismaError?.code === 'P2002' || prismaError?.message?.includes('Unique constraint')) {
-              // Category already exists, that's fine
-              successCount++;
-            } else {
-              logError('Error creating default category', error as Error, { userId, category });
-            }
-          }
-        }
-        logInfo('Default categories seeded with individual creates', { userId, count: successCount, total: defaultCategories.length });
       }
-      
-      logInfo('Default categories seeding completed', { userId, expectedCount: defaultCategories.length });
+
+      logInfo('Default categories seeding completed', { 
+        userId, 
+        created: createdCount, 
+        existing: existingCount,
+        total: defaultCategories.length,
+        errors: errors.length > 0 ? errors : undefined
+      });
+
+      // Verify final count
+      const finalCount = await prisma.category.count({
+        where: { userId: userId }
+      });
+      logInfo('Final category count after seeding', { userId, count: finalCount });
+
     } catch (error) {
-      logError('Error seeding default categories', error, { userId });
+      logError('Error in seedDefaultCategories', error as Error, { userId });
       // Don't throw - category seeding failure shouldn't prevent user creation
     }
   }
