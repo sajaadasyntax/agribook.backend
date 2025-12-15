@@ -171,6 +171,33 @@ export class UserController {
 
     return res.status(200).json({ message: 'Password changed successfully' });
   });
+
+  /**
+   * Admin: reset any user's password by ID
+   * Protected by admin middleware on the route.
+   */
+  adminResetPassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    logInfo('Admin reset password request', { userId: id });
+
+    if (!newPassword) {
+      return res.status(400).json({ message: 'New password is required' });
+    }
+
+    await userService.adminResetPassword(id, newPassword);
+
+    return res.status(200).json({ message: 'Password reset successfully' });
+  });
+
+  /**
+   * Admin: list all users
+   */
+  listUsers = asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
+    const users = await userService.listUsers();
+    return res.json(users);
+  });
 }
 
 export default new UserController();

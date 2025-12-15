@@ -684,6 +684,72 @@ export class UserService {
       throw new DatabaseError('Failed to change password');
     }
   }
+
+  /**
+   * Admin: reset a user's password without requiring the current password
+   * Intended to be protected by an admin-only route/middleware.
+   */
+  async adminResetPassword(userId: string, newPassword: string): Promise<void> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new NotFoundError('User not found');
+      }
+
+      // Validate new password with existing rules
+      const validation = validatePassword(newPassword);
+      if (!validation.valid) {
+        throw new BadRequestError(validation.errors.join('. '));
+      }
+
+      const hashedPassword = await hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: userId },
+        data: { password: hashedPassword },
+      });
+
+      // Revoke all refresh tokens for security
+      await this.logoutAll(userId);
+
+      logInfo('Admin reset password successfully', { userId });
+    } catch (error) {
+      if (error instanceof NotFoundError || error instanceof BadRequestError) {
+        throw error;
+      }
+      logError('Error in adminResetPassword', error, { userId });
+      throw new DatabaseError('Failed to reset password');
+    }
+  }
+
+  /**
+   * Admin: list all users with non-sensitive fields
+   */
+  async listUsers() {
+    try {
+      logInfo('Admin list users');
+
+      const users = await prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          phone: true,
+          companyName: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return users;
+    } catch (error) {
+      logError('Error listing users for admin', error as Error);
+      throw new DatabaseError('Failed to list users');
+    }
+  }
 }
 
 export default new UserService();
