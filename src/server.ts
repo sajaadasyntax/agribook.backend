@@ -23,13 +23,29 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 // CORS Configuration
 const corsOrigins = process.env.CORS_ORIGINS;
+// Default admin origin for admin panel
+const ADMIN_ORIGIN = 'https://agriadmin.vercel.app';
+
+// Build allowed origins list
+let allowedOrigins: string[] | boolean = true; // Default: allow all
+if (corsOrigins && corsOrigins !== '*') {
+  allowedOrigins = corsOrigins.split(',').map(origin => origin.trim());
+  // Always include admin origin if not already present
+  if (!allowedOrigins.includes(ADMIN_ORIGIN)) {
+    allowedOrigins.push(ADMIN_ORIGIN);
+  }
+} else if (corsOrigins === '*') {
+  allowedOrigins = true; // Allow all origins
+} else {
+  // If CORS_ORIGINS is not set, allow admin origin by default
+  allowedOrigins = [ADMIN_ORIGIN];
+}
+
 const corsOptions = {
-  origin: corsOrigins === '*' || !corsOrigins 
-    ? true 
-    : corsOrigins.split(',').map(origin => origin.trim()),
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'x-admin-key'],
 };
 
 // Middleware
